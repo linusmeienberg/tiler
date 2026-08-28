@@ -5,6 +5,14 @@ wallpaper group, and watch it tile the plane — interactively, in Jupyter.
 
 ## Install
 
+With [uv](https://docs.astral.sh/uv/) (recommended — this repo has a `uv.lock`):
+
+```bash
+uv sync --extra dev
+```
+
+Or with plain pip:
+
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
@@ -12,7 +20,11 @@ pip install -e ".[dev]"
 
 ## Use it
 
-In a Jupyter notebook:
+Launch Jupyter and open `examples/demo.ipynb`, or start from a blank notebook:
+
+```bash
+uv run jupyter lab   # or: jupyter lab, if using the pip/venv install
+```
 
 ```python
 from tiler import TilerWidget
