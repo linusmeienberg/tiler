@@ -1,11 +1,13 @@
-"""Interactive Jupyter widget: draw a motif, pick a wallpaper group, see it tile the plane."""
+"""Interactive Jupyter widget: place an image (or draw a motif) in the true fundamental
+domain of a wallpaper group, and watch it tile the plane."""
 from __future__ import annotations
 
 import numpy as np
 
 from .domain import FundamentalDomain
 from .groups import GROUP_SYMBOLS, WALLPAPER_GROUPS
-from .render import generate_covering
+from .render import covering_transforms
+from .transforms import Affine2D
 
 try:
     import ipywidgets as widgets
@@ -17,8 +19,27 @@ except ImportError as exc:  # pragma: no cover - exercised only without optional
     ) from exc
 
 _CANVAS_SIZE = 420
-_MOTIF_PADDING_CELLS = 0.15  # fraction of a cell shown as margin around the drawing cell
-_COVERING_CELLS_RADIUS = 2.2  # how many cells (roughly) to show in the covering preview
+_DOMAIN_PADDING = 0.35  # fraction of the domain's bounding-box size shown as margin
+_COVERING_VIEW_RADIUS = 2.4  # how far out (in domain bbox units) the covering preview extends
+
+
+def _view_transform(vmin: np.ndarray, vmax: np.ndarray, size: int) -> Affine2D:
+    extent = vmax - vmin
+    extent[extent == 0] = 1.0
+    scale_x = size / extent[0]
+    scale_y = size / extent[1]
+    matrix = np.array([[scale_x, 0.0], [0.0, -scale_y]])
+    translation = np.array([-scale_x * vmin[0], size + scale_y * vmin[1]])
+    return Affine2D(matrix, translation)
+
+
+def _canvas_params(affine: Affine2D) -> tuple[float, float, float, float, float, float]:
+    m, t = affine.matrix, affine.translation
+    return float(m[0, 0]), float(m[1, 0]), float(m[0, 1]), float(m[1, 1]), float(t[0]), float(t[1])
+
+
+def _apply_transform(canvas: Canvas, affine: Affine2D) -> None:
+    canvas.transform(*_canvas_params(affine))
 
 
 class TilerWidget(widgets.VBox):
@@ -26,25 +47,30 @@ class TilerWidget(widgets.VBox):
 
     def __init__(self, group: str = "p4m", cell_size: float = 1.0, ratio: float = 1.0, angle_deg: float = 70.0):
         self.domain = FundamentalDomain(group=group, cell_size=cell_size, ratio=ratio, angle_deg=angle_deg)
+        self._image_widget: widgets.Image | None = None
         self._drawing = False
+        self._dragging_image = False
         self._current_stroke: list[tuple[float, float]] = []
+        self._drag_start_canvas: tuple[float, float] | None = None
+        self._drag_start_center: np.ndarray | None = None
 
         self.group_dropdown = widgets.Dropdown(
             options=[(f"{s}  ({WALLPAPER_GROUPS[s].orbifold})", s) for s in GROUP_SYMBOLS],
             value=group,
             description="Group:",
         )
-        self.cell_size_slider = widgets.FloatSlider(
-            value=cell_size, min=0.3, max=3.0, step=0.05, description="Cell size:"
-        )
-        self.ratio_slider = widgets.FloatSlider(
-            value=ratio, min=0.3, max=3.0, step=0.05, description="b/a ratio:"
-        )
-        self.angle_slider = widgets.FloatSlider(
-            value=angle_deg, min=20.0, max=160.0, step=1.0, description="Angle:"
-        )
-        self.clear_button = widgets.Button(description="Clear", icon="trash")
-        self.undo_button = widgets.Button(description="Undo", icon="undo")
+        self.cell_size_slider = widgets.FloatSlider(value=cell_size, min=0.3, max=3.0, step=0.05, description="Cell size:")
+        self.ratio_slider = widgets.FloatSlider(value=ratio, min=0.3, max=3.0, step=0.05, description="b/a ratio:")
+        self.angle_slider = widgets.FloatSlider(value=angle_deg, min=20.0, max=160.0, step=1.0, description="Angle:")
+
+        self.mode_toggle = widgets.ToggleButtons(options=["Draw", "Move image"], value="Draw", description="Mouse:")
+        self.upload_button = widgets.FileUpload(accept=".png,.jpg,.jpeg,.svg", multiple=False, description="Load image")
+        self.image_scale_slider = widgets.FloatLogSlider(value=1.0, base=2, min=-4, max=4, step=0.05, description="Img scale:")
+        self.image_rotation_slider = widgets.FloatSlider(value=0.0, min=-180.0, max=180.0, step=1.0, description="Img rotate:")
+        self.remove_image_button = widgets.Button(description="Remove image", icon="trash")
+
+        self.clear_button = widgets.Button(description="Clear strokes", icon="eraser")
+        self.undo_button = widgets.Button(description="Undo stroke", icon="undo")
         self.status = widgets.HTML()
 
         self.draw_canvas = Canvas(width=_CANVAS_SIZE, height=_CANVAS_SIZE, sync_image_data=False)
@@ -54,6 +80,10 @@ class TilerWidget(widgets.VBox):
         self.cell_size_slider.observe(self._on_lattice_param_change, names="value")
         self.ratio_slider.observe(self._on_lattice_param_change, names="value")
         self.angle_slider.observe(self._on_lattice_param_change, names="value")
+        self.upload_button.observe(self._on_upload, names="value")
+        self.image_scale_slider.observe(self._on_image_param_change, names="value")
+        self.image_rotation_slider.observe(self._on_image_param_change, names="value")
+        self.remove_image_button.on_click(self._on_remove_image)
         self.clear_button.on_click(self._on_clear)
         self.undo_button.on_click(self._on_undo)
 
@@ -68,33 +98,39 @@ class TilerWidget(widgets.VBox):
                 self.cell_size_slider,
                 self.ratio_slider,
                 self.angle_slider,
+                widgets.HTML("<hr/>"),
+                self.upload_button,
+                self.mode_toggle,
+                self.image_scale_slider,
+                self.image_rotation_slider,
+                self.remove_image_button,
+                widgets.HTML("<hr/>"),
                 widgets.HBox([self.undo_button, self.clear_button]),
                 self.status,
             ]
         )
         canvases = widgets.HBox(
             [
-                widgets.VBox([widgets.Label("Draw the motif in the cell:"), self.draw_canvas]),
+                widgets.VBox([widgets.Label("Fundamental domain:"), self.draw_canvas]),
                 widgets.VBox([widgets.Label("Covering of the plane:"), self.cover_canvas]),
             ]
         )
         super().__init__([controls, canvases])
-        self._update_lattice_controls_visibility()
+        self._update_controls_visibility()
         self._redraw_all()
 
-    # -- coordinate mapping -----------------------------------------------------
+    # -- coordinate mapping -------------------------------------------------------
 
     def _view_bounds(self) -> tuple[np.ndarray, np.ndarray]:
-        a1, a2 = self.domain.basis
-        span = max(np.linalg.norm(a1), np.linalg.norm(a2)) * (1 + _MOTIF_PADDING_CELLS)
-        return -np.array([span, span]), np.array([span, span])
+        polygon = self.domain.polygon
+        bbox_min, bbox_max = polygon.min(axis=0), polygon.max(axis=0)
+        center = (bbox_min + bbox_max) / 2
+        half_extent = max(bbox_max - bbox_min) / 2 * (1 + _DOMAIN_PADDING)
+        half_extent = max(half_extent, 1e-6)
+        return center - half_extent, center + half_extent
 
     def _to_canvas(self, points: np.ndarray, vmin: np.ndarray, vmax: np.ndarray) -> np.ndarray:
-        extent = vmax - vmin
-        extent[extent == 0] = 1.0
-        x = (points[:, 0] - vmin[0]) / extent[0] * _CANVAS_SIZE
-        y = _CANVAS_SIZE - (points[:, 1] - vmin[1]) / extent[1] * _CANVAS_SIZE
-        return np.column_stack([x, y])
+        return _view_transform(vmin, vmax, _CANVAS_SIZE).apply(points)
 
     def _from_canvas(self, x: float, y: float, vmin: np.ndarray, vmax: np.ndarray) -> tuple[float, float]:
         extent = vmax - vmin
@@ -102,14 +138,30 @@ class TilerWidget(widgets.VBox):
         py = vmin[1] + ((_CANVAS_SIZE - y) / _CANVAS_SIZE) * extent[1]
         return px, py
 
-    # -- drawing on the motif canvas ---------------------------------------------
+    def _canvas_delta_to_world(self, dx: float, dy: float, vmin: np.ndarray, vmax: np.ndarray) -> tuple[float, float]:
+        extent = vmax - vmin
+        return dx / _CANVAS_SIZE * extent[0], -dy / _CANVAS_SIZE * extent[1]
+
+    # -- mouse interaction ---------------------------------------------------------
 
     def _on_mouse_down(self, x: float, y: float) -> None:
+        if self.mode_toggle.value == "Move image" and self.domain.image is not None:
+            self._dragging_image = True
+            self._drag_start_canvas = (x, y)
+            self._drag_start_center = np.array(self.domain.image.center)
+            return
         self._drawing = True
         vmin, vmax = self._view_bounds()
         self._current_stroke = [self._from_canvas(x, y, vmin, vmax)]
 
     def _on_mouse_move(self, x: float, y: float) -> None:
+        if self._dragging_image and self.domain.image is not None:
+            vmin, vmax = self._view_bounds()
+            dx, dy = x - self._drag_start_canvas[0], y - self._drag_start_canvas[1]
+            wdx, wdy = self._canvas_delta_to_world(dx, dy, vmin, vmax)
+            self.domain.image.center = self._drag_start_center + np.array([wdx, wdy])
+            self._redraw_all()
+            return
         if not self._drawing:
             return
         vmin, vmax = self._view_bounds()
@@ -120,6 +172,11 @@ class TilerWidget(widgets.VBox):
         self.draw_canvas.stroke_line(p0[0], p0[1], p1[0], p1[1])
 
     def _on_mouse_up(self, x: float = 0.0, y: float = 0.0) -> None:
+        if self._dragging_image:
+            self._dragging_image = False
+            self._drag_start_canvas = None
+            self._drag_start_center = None
+            return
         if not self._drawing:
             return
         self._drawing = False
@@ -127,6 +184,8 @@ class TilerWidget(widgets.VBox):
             self.domain.add_path(np.array(self._current_stroke))
         self._current_stroke = []
         self._redraw_all()
+
+    # -- control callbacks -----------------------------------------------------------
 
     def _on_clear(self, _button=None) -> None:
         self.domain.clear()
@@ -138,7 +197,7 @@ class TilerWidget(widgets.VBox):
 
     def _on_group_change(self, change) -> None:
         self.domain.set_group(change["new"])
-        self._update_lattice_controls_visibility()
+        self._update_controls_visibility()
         self._redraw_all()
 
     def _on_lattice_param_change(self, _change) -> None:
@@ -147,38 +206,126 @@ class TilerWidget(widgets.VBox):
         self.domain.angle_deg = self.angle_slider.value
         self._redraw_all()
 
-    def _update_lattice_controls_visibility(self) -> None:
+    def _on_upload(self, change) -> None:
+        uploads = change["new"]
+        if not uploads:
+            return
+        item = uploads[0]
+        self.domain.set_image(bytes(item["content"]), item["name"])
+        self._sync_image_widget()
+        self.image_scale_slider.unobserve(self._on_image_param_change, names="value")
+        self.image_rotation_slider.unobserve(self._on_image_param_change, names="value")
+        self.image_scale_slider.value = self.domain.image.scale
+        self.image_rotation_slider.value = self.domain.image.rotation_deg
+        self.image_scale_slider.observe(self._on_image_param_change, names="value")
+        self.image_rotation_slider.observe(self._on_image_param_change, names="value")
+        self.mode_toggle.value = "Move image"
+        self.upload_button.value = ()
+        self._update_controls_visibility()
+        self._redraw_all()
+
+    def _on_image_param_change(self, _change) -> None:
+        if self.domain.image is None:
+            return
+        self.domain.image.scale = self.image_scale_slider.value
+        self.domain.image.rotation_deg = self.image_rotation_slider.value
+        self._redraw_all()
+
+    def _on_remove_image(self, _button=None) -> None:
+        self.domain.clear_image()
+        self._image_widget = None
+        self.mode_toggle.value = "Draw"
+        self._update_controls_visibility()
+        self._redraw_all()
+
+    def _sync_image_widget(self) -> None:
+        image = self.domain.image
+        if image is None:
+            self._image_widget = None
+            return
+        self._image_widget = widgets.Image(value=image.data, format=image.format)
+
+    def _update_controls_visibility(self) -> None:
         kind = self.domain.lattice_kind.value
         self.ratio_slider.layout.display = "none" if kind in ("square", "hexagonal") else None
         self.angle_slider.layout.display = None if kind == "oblique" else "none"
 
-    # -- rendering ----------------------------------------------------------------
+        has_image = self.domain.image is not None
+        display = None if has_image else "none"
+        self.image_scale_slider.layout.display = display
+        self.image_rotation_slider.layout.display = display
+        self.remove_image_button.layout.display = display
+        self.mode_toggle.disabled = not has_image
 
-    def _draw_cell_outline(self, vmin: np.ndarray, vmax: np.ndarray) -> None:
-        a1, a2 = self.domain.basis
-        corners = np.array([[0, 0], a1, a1 + a2, a2, [0, 0]])
-        canvas_pts = self._to_canvas(corners, vmin, vmax)
-        self.draw_canvas.stroke_style = "#bbbbbb"
-        self.draw_canvas.line_width = 1
-        self.draw_canvas.stroke_lines(canvas_pts)
+    # -- rendering --------------------------------------------------------------------
+
+    def _draw_polygon_path(self, canvas: Canvas) -> None:
+        pts = self.domain.polygon
+        canvas.begin_path()
+        canvas.move_to(pts[0, 0], pts[0, 1])
+        for p in pts[1:]:
+            canvas.line_to(p[0], p[1])
+        canvas.close_path()
 
     def _redraw_all(self) -> None:
         vmin, vmax = self._view_bounds()
+        view = _view_transform(vmin, vmax, _CANVAS_SIZE)
 
+        # -- reference canvas: base cell only, no group orbit --
         self.draw_canvas.clear()
-        self._draw_cell_outline(vmin, vmax)
+        self.draw_canvas.save()  # S0: identity transform, no clip
+        _apply_transform(self.draw_canvas, view)
+        self._draw_polygon_path(self.draw_canvas)
+        self.draw_canvas.clip()  # clip now active in this (view-transformed) state
+        if self._image_widget is not None and self.domain.image is not None:
+            self.draw_canvas.save()  # S1: transform=view, clip=polygon
+            _apply_transform(self.draw_canvas, self.domain.image.to_world_transform())
+            w, h = self.domain.image.pixel_size
+            self.draw_canvas.draw_image(self._image_widget, 0, 0, w, h)
+            self.draw_canvas.restore()  # back to S1: transform=view, clip still active
         self.draw_canvas.stroke_style = "#1a1a1a"
-        self.draw_canvas.line_width = 2
+        self.draw_canvas.line_width = 2 / view.matrix[0, 0]
         for path in self.domain.paths:
-            self.draw_canvas.stroke_lines(self._to_canvas(path, vmin, vmax))
+            self.draw_canvas.stroke_lines(path)
+        self.draw_canvas.restore()  # back to S0: identity transform, no clip
 
-        cvmin = vmin * _COVERING_CELLS_RADIUS
-        cvmax = vmax * _COVERING_CELLS_RADIUS
-        covering = generate_covering(self.domain, tuple(cvmin), tuple(cvmax))
+        self.draw_canvas.save()
+        _apply_transform(self.draw_canvas, view)
+        self.draw_canvas.stroke_style = "#4488ff"
+        self.draw_canvas.line_width = 2 / view.matrix[0, 0]
+        self._draw_polygon_path(self.draw_canvas)
+        self.draw_canvas.stroke()
+        self.draw_canvas.restore()
+
+        # -- covering canvas: every symmetry copy --
+        cvmin, cvmax = vmin * _COVERING_VIEW_RADIUS, vmax * _COVERING_VIEW_RADIUS
+        cview = _view_transform(cvmin, cvmax, _CANVAS_SIZE)
+        transforms = covering_transforms(self.domain, tuple(cvmin), tuple(cvmax))
+
         self.cover_canvas.clear()
-        self.cover_canvas.stroke_style = "#1a1a1a"
-        self.cover_canvas.line_width = 1.2
-        for path in covering:
-            self.cover_canvas.stroke_lines(self._to_canvas(path, cvmin, cvmax))
+        for t, rep in transforms:
+            self.cover_canvas.save()
+            _apply_transform(self.cover_canvas, cview)
+            _apply_transform(self.cover_canvas, Affine2D(np.eye(2), t))
+            _apply_transform(self.cover_canvas, rep)
+            self._draw_polygon_path(self.cover_canvas)
+            self.cover_canvas.clip()
+            if self._image_widget is not None and self.domain.image is not None:
+                self.cover_canvas.save()
+                _apply_transform(self.cover_canvas, self.domain.image.to_world_transform())
+                w, h = self.domain.image.pixel_size
+                self.cover_canvas.draw_image(self._image_widget, 0, 0, w, h)
+                self.cover_canvas.restore()
+            if self.domain.paths:
+                self.cover_canvas.stroke_style = "#1a1a1a"
+                self.cover_canvas.line_width = 1.2 / cview.matrix[0, 0]
+                for path in self.domain.paths:
+                    self.cover_canvas.stroke_lines(path)
+            self.cover_canvas.restore()
 
-        self.status.value = f"<b>{len(self.domain.paths)}</b> stroke(s) &middot; <b>{len(covering)}</b> copies shown"
+        n_copies = len(transforms)
+        self.status.value = (
+            f"<b>{len(self.domain.paths)}</b> stroke(s) &middot; "
+            f"image: <b>{'yes' if self.domain.image else 'no'}</b> &middot; "
+            f"<b>{n_copies}</b> copies shown"
+        )

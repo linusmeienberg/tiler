@@ -6,6 +6,31 @@ import numpy as np
 from .domain import FundamentalDomain
 from .groups import coset_representatives
 from .lattice import cell_range_for_viewport, lattice_translations
+from .transforms import Affine2D
+
+
+def covering_transforms(
+    domain: FundamentalDomain,
+    viewport_min: tuple[float, float],
+    viewport_max: tuple[float, float],
+    margin_cells: int = 1,
+) -> list[tuple[np.ndarray, Affine2D]]:
+    """Enumerate the (lattice translation, point-group rep) pairs covering a viewport.
+
+    Each pair (t, rep) means: take content placed in the base cell (in world
+    coordinates), apply ``rep``, then translate by ``t``, to get one copy of the
+    covering. Used both for transforming vector paths (see ``generate_covering``)
+    and for driving per-copy canvas transforms when compositing a placed image.
+    """
+    a1, a2 = domain.basis
+    reps = coset_representatives(domain.group, a1, a2)
+    m_range, n_range = cell_range_for_viewport(
+        a1, a2, np.asarray(viewport_min), np.asarray(viewport_max), margin_cells=margin_cells
+    )
+    translations = list(
+        lattice_translations(domain.lattice_kind, a1, a2, m_range, n_range)
+    )
+    return [(t, rep) for rep in reps for t in translations]
 
 
 def generate_covering(
@@ -23,21 +48,11 @@ def generate_covering(
     if not domain.paths:
         return []
 
-    a1, a2 = domain.basis
-    reps = coset_representatives(domain.group, a1, a2)
-    m_range, n_range = cell_range_for_viewport(
-        a1, a2, np.asarray(viewport_min), np.asarray(viewport_max), margin_cells=margin_cells
-    )
-    translations = list(
-        lattice_translations(domain.lattice_kind, a1, a2, m_range, n_range)
-    )
-
+    transforms = covering_transforms(domain, viewport_min, viewport_max, margin_cells)
     covering: list[np.ndarray] = []
     for path in domain.paths:
-        for rep in reps:
-            transformed = rep.apply(path)
-            for t in translations:
-                covering.append(transformed + t)
+        for t, rep in transforms:
+            covering.append(rep.apply(path) + t)
     return covering
 
 
