@@ -11,7 +11,7 @@ from .transforms import Affine2D
 
 try:
     import ipywidgets as widgets
-    from ipycanvas import Canvas
+    from ipycanvas import Canvas, hold_canvas
 except ImportError as exc:  # pragma: no cover - exercised only without optional deps
     raise ImportError(
         "TilerWidget requires the optional 'ipywidgets' and 'ipycanvas' packages. "
@@ -59,19 +59,32 @@ class TilerWidget(widgets.VBox):
             value=group,
             description="Group:",
         )
-        self.cell_size_slider = widgets.FloatSlider(value=cell_size, min=0.3, max=3.0, step=0.05, description="Cell size:")
-        self.ratio_slider = widgets.FloatSlider(value=ratio, min=0.3, max=3.0, step=0.05, description="b/a ratio:")
-        self.angle_slider = widgets.FloatSlider(value=angle_deg, min=20.0, max=160.0, step=1.0, description="Angle:")
+        # continuous_update=False: these drive a full covering redraw (up to ~1000+
+        # copies), so only redraw when the slider is released, not on every tick.
+        self.cell_size_slider = widgets.FloatSlider(
+            value=cell_size, min=0.3, max=3.0, step=0.05, description="Cell size:", continuous_update=False
+        )
+        self.ratio_slider = widgets.FloatSlider(
+            value=ratio, min=0.3, max=3.0, step=0.05, description="b/a ratio:", continuous_update=False
+        )
+        self.angle_slider = widgets.FloatSlider(
+            value=angle_deg, min=20.0, max=160.0, step=1.0, description="Angle:", continuous_update=False
+        )
 
         self.mode_toggle = widgets.ToggleButtons(options=["Draw", "Move image"], value="Draw", description="Mouse:")
         self.upload_button = widgets.FileUpload(accept=".png,.jpg,.jpeg,.svg", multiple=False, description="Load image")
-        self.image_scale_slider = widgets.FloatLogSlider(value=1.0, base=2, min=-4, max=4, step=0.05, description="Img scale:")
-        self.image_rotation_slider = widgets.FloatSlider(value=0.0, min=-180.0, max=180.0, step=1.0, description="Img rotate:")
+        self.image_scale_slider = widgets.FloatLogSlider(
+            value=1.0, base=2, min=-4, max=4, step=0.05, description="Img scale:", continuous_update=False
+        )
+        self.image_rotation_slider = widgets.FloatSlider(
+            value=0.0, min=-180.0, max=180.0, step=1.0, description="Img rotate:", continuous_update=False
+        )
         self.remove_image_button = widgets.Button(description="Remove image", icon="trash")
 
         self.clear_button = widgets.Button(description="Clear strokes", icon="eraser")
         self.undo_button = widgets.Button(description="Undo stroke", icon="undo")
         self.status = widgets.HTML()
+        self._n_copies = 0
 
         self.draw_canvas = Canvas(width=_CANVAS_SIZE, height=_CANVAS_SIZE, sync_image_data=False)
         self.cover_canvas = Canvas(width=_CANVAS_SIZE, height=_CANVAS_SIZE, sync_image_data=False)
@@ -160,7 +173,7 @@ class TilerWidget(widgets.VBox):
             dx, dy = x - self._drag_start_canvas[0], y - self._drag_start_canvas[1]
             wdx, wdy = self._canvas_delta_to_world(dx, dy, vmin, vmax)
             self.domain.image.center = self._drag_start_center + np.array([wdx, wdy])
-            self._redraw_all()
+            self._redraw_draw_canvas()  # cheap live feedback; full covering redraws on mouse-up
             return
         if not self._drawing:
             return
@@ -176,6 +189,7 @@ class TilerWidget(widgets.VBox):
             self._dragging_image = False
             self._drag_start_canvas = None
             self._drag_start_center = None
+            self._redraw_cover_canvas()
             return
         if not self._drawing:
             return
@@ -268,10 +282,19 @@ class TilerWidget(widgets.VBox):
         canvas.close_path()
 
     def _redraw_all(self) -> None:
+        self._redraw_draw_canvas()
+        self._redraw_cover_canvas()
+
+    def _redraw_draw_canvas(self) -> None:
         vmin, vmax = self._view_bounds()
         view = _view_transform(vmin, vmax, _CANVAS_SIZE)
 
         # -- reference canvas: base cell only, no group orbit --
+        with hold_canvas():
+            self._draw_reference_canvas(view)
+        self._update_status()
+
+    def _draw_reference_canvas(self, view: Affine2D) -> None:
         self.draw_canvas.clear()
         self.draw_canvas.save()  # S0: identity transform, no clip
         _apply_transform(self.draw_canvas, view)
@@ -297,35 +320,40 @@ class TilerWidget(widgets.VBox):
         self.draw_canvas.stroke()
         self.draw_canvas.restore()
 
-        # -- covering canvas: every symmetry copy --
+    def _redraw_cover_canvas(self) -> None:
+        vmin, vmax = self._view_bounds()
         cvmin, cvmax = vmin * _COVERING_VIEW_RADIUS, vmax * _COVERING_VIEW_RADIUS
         cview = _view_transform(cvmin, cvmax, _CANVAS_SIZE)
         transforms = covering_transforms(self.domain, tuple(cvmin), tuple(cvmax))
 
-        self.cover_canvas.clear()
-        for t, rep in transforms:
-            self.cover_canvas.save()
-            _apply_transform(self.cover_canvas, cview)
-            _apply_transform(self.cover_canvas, Affine2D(np.eye(2), t))
-            _apply_transform(self.cover_canvas, rep)
-            self._draw_polygon_path(self.cover_canvas)
-            self.cover_canvas.clip()
-            if self._image_widget is not None and self.domain.image is not None:
+        with hold_canvas():
+            self.cover_canvas.clear()
+            for t, rep in transforms:
                 self.cover_canvas.save()
-                _apply_transform(self.cover_canvas, self.domain.image.to_world_transform())
-                w, h = self.domain.image.pixel_size
-                self.cover_canvas.draw_image(self._image_widget, 0, 0, w, h)
+                _apply_transform(self.cover_canvas, cview)
+                _apply_transform(self.cover_canvas, Affine2D(np.eye(2), t))
+                _apply_transform(self.cover_canvas, rep)
+                self._draw_polygon_path(self.cover_canvas)
+                self.cover_canvas.clip()
+                if self._image_widget is not None and self.domain.image is not None:
+                    self.cover_canvas.save()
+                    _apply_transform(self.cover_canvas, self.domain.image.to_world_transform())
+                    w, h = self.domain.image.pixel_size
+                    self.cover_canvas.draw_image(self._image_widget, 0, 0, w, h)
+                    self.cover_canvas.restore()
+                if self.domain.paths:
+                    self.cover_canvas.stroke_style = "#1a1a1a"
+                    self.cover_canvas.line_width = 1.2 / cview.matrix[0, 0]
+                    for path in self.domain.paths:
+                        self.cover_canvas.stroke_lines(path)
                 self.cover_canvas.restore()
-            if self.domain.paths:
-                self.cover_canvas.stroke_style = "#1a1a1a"
-                self.cover_canvas.line_width = 1.2 / cview.matrix[0, 0]
-                for path in self.domain.paths:
-                    self.cover_canvas.stroke_lines(path)
-            self.cover_canvas.restore()
 
-        n_copies = len(transforms)
+        self._n_copies = len(transforms)
+        self._update_status()
+
+    def _update_status(self) -> None:
         self.status.value = (
             f"<b>{len(self.domain.paths)}</b> stroke(s) &middot; "
             f"image: <b>{'yes' if self.domain.image else 'no'}</b> &middot; "
-            f"<b>{n_copies}</b> copies shown"
+            f"<b>{self._n_copies}</b> copies shown"
         )
