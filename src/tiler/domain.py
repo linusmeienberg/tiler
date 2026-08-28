@@ -56,6 +56,7 @@ class FundamentalDomain:
     angle_deg: float = 70.0
     paths: list[np.ndarray] = field(default_factory=list)
     image: ImagePlacement | None = None
+    _polygon_cache: tuple[tuple, np.ndarray] | None = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         if self.group not in GROUP_SYMBOLS:
@@ -76,9 +77,21 @@ class FundamentalDomain:
 
     @property
     def polygon(self) -> np.ndarray:
-        """The true fundamental-domain polygon for the current group and lattice."""
+        """The true fundamental-domain polygon for the current group and lattice.
+
+        Computing this involves a self-verifying search over a few candidate base
+        points (see ``tiler.fundamental_domain``) and can take tens of
+        milliseconds -- cheap once, but far too slow to redo on every mouse-move
+        event or every copy in a covering redraw, so the result is cached and only
+        recomputed when group/cell_size/ratio/angle_deg actually change.
+        """
+        key = (self.group, self.cell_size, self.ratio, self.angle_deg)
+        if self._polygon_cache is not None and self._polygon_cache[0] == key:
+            return self._polygon_cache[1]
         a1, a2 = self.basis
-        return dirichlet_domain(self.group, a1, a2)
+        polygon = dirichlet_domain(self.group, a1, a2)
+        self._polygon_cache = (key, polygon)
+        return polygon
 
     def add_path(self, points: np.ndarray) -> None:
         points = np.asarray(points, dtype=float).reshape(-1, 2)

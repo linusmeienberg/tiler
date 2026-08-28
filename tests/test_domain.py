@@ -16,6 +16,25 @@ def _png_bytes(width: int, height: int) -> bytes:
     return buf.getvalue()
 
 
+def test_polygon_is_cached_and_invalidated_on_lattice_change():
+    """polygon is expensive (a self-verifying search over candidate base points);
+    it must be cached across repeated access and only recomputed when the group or
+    lattice parameters actually change -- see the perf note in FundamentalDomain.polygon.
+    """
+    domain = FundamentalDomain(group="p6m", cell_size=1.0)
+    first = domain.polygon
+    assert domain.polygon is first  # cache hit: identical object, not just equal
+
+    domain.cell_size = 1.5
+    second = domain.polygon
+    assert second is not first
+    assert domain.polygon is second
+
+    domain.set_group("p4")
+    third = domain.polygon
+    assert third is not second
+
+
 def test_detect_image_format():
     assert detect_image_format("photo.png") == "png"
     assert detect_image_format("photo.PNG") == "png"
