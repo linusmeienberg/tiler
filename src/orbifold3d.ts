@@ -100,7 +100,8 @@ export function setActive(on: boolean): void {
     resize();
     const loop = () => {
       if (!running) return;
-      controls.update();
+      // No controls.update() here: for ArcballControls it re-aims the camera with
+      // the old up vector every frame and fights the trackball rotation (jitter).
       renderer!.render(scene, camera);
       requestAnimationFrame(loop);
     };
