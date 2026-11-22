@@ -4,6 +4,7 @@ import { construct, nearestOrbitIndex, type Construction } from "./construction"
 import { CLASS_COLORS, COLORS, draw, type CoverState, type ImageMode, type Preview } from "./draw";
 import { inventory, type Inventory } from "./inventory";
 import type { Point } from "./isometry";
+import { canonicalDomain, copyContaining, type CanonicalResult, type OrbifoldDomain } from "./canonical";
 import { overlayCheck, type OverlayResult } from "./overlay";
 import { realizationFromConstruction } from "./tiling";
 import {
@@ -79,6 +80,17 @@ let showOrbit = true;
 let showDerived = true;
 let playTimer: number | null = null;
 let imageMode: ImageMode = "original";
+
+/** Fundamental domain shown: Voronoi cell of p, or the canonical domain (the orbifold). */
+type DomainMode = "voronoi" | "orbifold";
+const DOMAIN_KEY = "tiler.domainMode";
+let domainMode: DomainMode = (() => {
+  try {
+    return localStorage.getItem(DOMAIN_KEY) === "orbifold" ? "orbifold" : "voronoi";
+  } catch {
+    return "voronoi";
+  }
+})();
 
 type Drag =
   | { type: "pan"; start: Point; startView: View }
@@ -192,6 +204,42 @@ function analysis(): Analysis {
   return cached;
 }
 
+interface ShownDomain {
+  polygon: Point[];
+  orbifold: OrbifoldDomain | null;
+  /** Why the orbifold could not be shown (then the Voronoi cell is). */
+  error: string | null;
+}
+let canonicalCache: { key: string; result: CanonicalResult | null } = { key: "", result: null };
+
+/** The fundamental domain to show and use, per the chosen mode (null while p is not set). */
+function currentDomain(): ShownDomain | null {
+  const a = analysis();
+  const c = a.auxiliary ? null : a.construction;
+  if (!c || !scene.base) return null;
+  if (domainMode === "voronoi") return { polygon: c.domain, orbifold: null, error: null };
+  const fallback = " Gezeigt wird der Voronoi-Bereich.";
+  if (!a.inventory) return { polygon: c.domain, orbifold: null, error: "Der Orbifold braucht eine gültige Inventur." + fallback };
+  if (canonicalCache.key !== a.key) canonicalCache = { key: a.key, result: canonicalDomain(c, a.inventory, scene.base) };
+  const r = canonicalCache.result!;
+  if ("error" in r) return { polygon: c.domain, orbifold: null, error: r.error + fallback };
+  return { polygon: r.domain.polygon, orbifold: r.domain, error: null };
+}
+
+function setDomainMode(m: DomainMode): void {
+  domainMode = m;
+  try {
+    localStorage.setItem(DOMAIN_KEY, m);
+  } catch {
+    /* ignore */
+  }
+  for (const btn of document.querySelectorAll<HTMLButtonElement>("#domain-mode button")) {
+    btn.classList.toggle("active", btn.dataset.domain === m);
+  }
+  $("#domain-legend").hidden = m !== "orbifold";
+  requestRender();
+}
+
 /** The construction around the user's p (null while p is not set). */
 function currentConstruction(): Construction | null {
   const a = analysis();
@@ -208,11 +256,12 @@ function currentOverlay(): OverlayResult | null {
   const a = analysis();
   const c = a.auxiliary ? null : a.construction;
   if (!image || !c || c.copiesPerCell === null) return null;
-  const key = a.key + image.src;
+  const key = a.key + image.src + domainMode;
   if (overlayCache?.key === key) return overlayCache.result;
   const editing = drag?.type === "handle" || drag?.type === "base";
   if (editing || imageMode === "original") return null;
-  overlayCache = { key, result: overlayCheck(image, image.naturalWidth, image.naturalHeight, c) };
+  const domain = currentDomain();
+  overlayCache = { key, result: overlayCheck(image, image.naturalWidth, image.naturalHeight, c, domain?.polygon ?? c.domain) };
   return overlayCache.result;
 }
 
@@ -280,7 +329,7 @@ function stopPlay(): void {
   $("#play").textContent = "▶";
 }
 
-function renderCoverPanel(c: Construction | null, hovered: number | null): void {
+function renderCoverPanel(c: Construction | null, hovered: number | null, domain: ShownDomain | null): void {
   $("#cover").hidden = !c;
   $("#cover-empty").hidden = !!c;
   if (!c) return;
@@ -290,7 +339,8 @@ function renderCoverPanel(c: Construction | null, hovered: number | null): void 
   slider.value = String(lengthLimit);
   $("#length-value").textContent = `${lengthLimit} / ${c.maxLength}`;
 
-  const info = [`${c.elements.length} Gruppenelemente`, `Fundamentalbereich mit ${c.domain.length} Ecken`];
+  const corners = domain?.polygon.length ?? c.domain.length;
+  const info = [`${c.elements.length} Gruppenelemente`, `${domain?.orbifold ? "Orbifold" : "Voronoi-Bereich"} mit ${corners} Ecken`];
   if (c.copiesPerCell !== null) {
     info.push(`${formatNumber(c.copiesPerCell)} Bereiche pro primitiver Gitterzelle`);
     const drawn = latticeBasis(scene);
@@ -313,7 +363,9 @@ function renderCoverPanel(c: Construction | null, hovered: number | null): void 
   }
   $("#cover-hover").textContent = hoverText;
 
-  renderWarnings("#cover-warnings", c.pointWarnings);
+  // In orbifold mode only "p on an element" matters (the shape no longer depends on p).
+  const warnings = domain?.orbifold ? (c.onElement ? c.pointWarnings : []) : c.pointWarnings;
+  renderWarnings("#cover-warnings", domain?.error ? [...warnings, domain.error] : warnings);
 }
 
 function renderGroupWarnings(warnings: string[]): void {
@@ -432,10 +484,18 @@ function render(): void {
   const construction = a.auxiliary ? null : a.construction;
   let cover: CoverState | null = null;
   let hovered: number | null = null;
-  if (construction && scene.base) {
-    hovered = pointer ? nearestOrbitIndex(construction.orbit, toWorld(view, pointer)) : null;
+  const domain = currentDomain();
+  if (construction && scene.base && domain) {
+    if (pointer) {
+      const w = toWorld(view, pointer);
+      // The Voronoi copy under the cursor is the one with the nearest orbit point; others need a polygon test.
+      hovered = domain.orbifold ? copyContaining(construction, domain.polygon, w) : nearestOrbitIndex(construction.orbit, w);
+      if (hovered < 0) hovered = null;
+    }
     cover = {
       construction,
+      domain: domain.polygon,
+      orbifold: domain.orbifold,
       base: scene.base,
       maxLength: lengthLimit,
       showCopies,
@@ -459,7 +519,7 @@ function render(): void {
     overlay: overlay ? { mode: imageMode, result: overlay } : null,
   });
   renderGroupWarnings(a.construction?.groupWarnings ?? []);
-  renderCoverPanel(construction, hovered);
+  renderCoverPanel(construction, hovered, domain);
   renderInventoryPanel(a.inventory);
   renderCheckPanel(!!(image && construction && construction.copiesPerCell !== null), overlay);
   renderStatus();
@@ -877,6 +937,9 @@ $<HTMLInputElement>("#show-orbit").addEventListener("change", (e) => {
   showOrbit = (e.target as HTMLInputElement).checked;
   requestRender();
 });
+for (const btn of document.querySelectorAll<HTMLButtonElement>("#domain-mode button")) {
+  btn.addEventListener("click", () => setDomainMode(btn.dataset.domain as DomainMode));
+}
 for (const btn of document.querySelectorAll<HTMLButtonElement>("#image-mode button")) {
   btn.addEventListener("click", () => setImageMode(btn.dataset.mode as ImageMode));
 }
@@ -959,4 +1022,5 @@ gen.setupPanel(requestRender);
 renderToolbar();
 renderList();
 setImageMode("original");
+setDomainMode(domainMode);
 setMode(mode);

@@ -54,7 +54,14 @@ export function compareRGBA(a: Uint8ClampedArray, b: Uint8ClampedArray, out?: Ui
   return { mean: count ? sum / count : 0, coverage: pixels ? count / pixels : 0 };
 }
 
-export function overlayCheck(image: CanvasImageSource, width: number, height: number, c: Construction): OverlayResult {
+/** `domain`: the fundamental domain to rebuild from (Voronoi cell of p by default); must contain p. */
+export function overlayCheck(
+  image: CanvasImageSource,
+  width: number,
+  height: number,
+  c: Construction,
+  domainPolygon: Point[] = c.domain,
+): OverlayResult {
   const scale = Math.min(1, MAX_SIDE / Math.max(width, height));
   const W = Math.max(1, Math.round(width * scale));
   const H = Math.max(1, Math.round(height * scale));
@@ -68,7 +75,7 @@ export function overlayCheck(image: CanvasImageSource, width: number, height: nu
   const reconstruction = canvas(W, H);
   const r = reconstruction.ctx;
   const p = c.orbit[0];
-  const domain = grow(c.domain, p, 1 / scale);
+  const domain = grow(domainPolygon, p, 1 / scale);
   const reach = Math.max(...domain.map((v) => Math.hypot(v.x - p.x, v.y - p.y)));
   const xs = domain.map((v) => v.x * scale);
   const ys = domain.map((v) => v.y * scale);

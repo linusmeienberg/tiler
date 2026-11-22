@@ -37,6 +37,21 @@ describe("tiling", () => {
     }
   });
 
+  it.each(GROUPS.map((g) => [g.conway] as const))("%s: orbifold domain tiles the view rectangle exactly once", (conway) => {
+    const t = buildTiling(realize(findGroup(conway), params), base, "orbifold")!;
+    expect(t.orbifold).not.toBeNull();
+    const rect = { x0: -200, y0: 100, x1: 150, y1: 380 };
+    const copies = visibleCopies(t, rect)!;
+    let seed = 13;
+    const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    for (let k = 0; k < 40; k++) {
+      const q = { x: rect.x0 + rand() * 350, y: rect.y0 + rand() * 280 };
+      const containing = copies.filter((g) => inside(apply(inverse(g), q), t.domain));
+      expect(containing).toHaveLength(1);
+      expect(copyAt(t, q)).toEqual(containing[0]);
+    }
+  });
+
   it("refuses a start point on a symmetry element", () => {
     expect(tilingOf("*442", { x: 0.3, y: 0 })).toBeNull(); // on a mirror
   });

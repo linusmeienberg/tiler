@@ -32,6 +32,17 @@
           <label class="slider" id="gen-row-angle">Winkel zwischen a und b <span id="gen-angle-value"></span><input type="range" id="gen-angle" min="45" max="90" step="1" /></label>
           <p id="gen-info" class="info"></p>
 
+          <h2>Fundamentalbereich</h2>
+          <div class="segmented" id="gen-domain-mode">
+            <button data-domain="voronoi">Voronoi-Bereich von p</button><button data-domain="orbifold">Orbifold</button>
+          </div>
+          <p id="gen-domain-legend" class="info legend">
+            Spiegel bilden den Rand (<b class="c-mirror">blau</b>), Drehzentren und Spiegelecken die Ecken.
+            Gleich markierte Kanten werden verklebt: durch eine <b>Drehung</b>, eine
+            <b class="c-translation">Translation</b> oder eine <b class="c-glide">Gleitspiegelung</b> (gestrichelt).
+          </p>
+          <p id="gen-domain-error" class="info"></p>
+
           <h2>Motiv</h2>
           <p id="gen-no-motif" class="empty">»Bild laden« oder »Beispiel«: das Bild wird in den Fundamentalbereich D gelegt.</p>
           <div id="gen-motif">
@@ -41,7 +52,7 @@
           </div>
           <label class="row"><input type="checkbox" id="gen-edges" /> Grenzen der Kopien</label>
           <button id="export" hidden>Ausschnitt speichern</button>
-          <p class="info">Ziehen verschiebt das Motiv – in jeder Kopie folgt es dem Zeiger. Den Punkt p ziehen ändert die Form von D (Dirichlet-Bereich von p).</p>
+          <p class="info">Ziehen verschiebt das Motiv – in jeder Kopie folgt es dem Zeiger. Den Punkt p ziehen ändert die Form von D (Voronoi) bzw. wählt die Kopie (Orbifold).</p>
         </div>
 
         <div id="side-analyse">
@@ -54,6 +65,15 @@
         <h2>Aufbau</h2>
         <div id="cover-empty" class="empty">Werkzeug »Startpunkt« (P) wählen und einen Punkt p ins Bild setzen.</div>
         <div id="cover">
+          <div class="segmented" id="domain-mode" title="Welcher Fundamentalbereich gezeigt und verwendet wird">
+            <button data-domain="voronoi">Voronoi-Bereich von p</button><button data-domain="orbifold">Orbifold</button>
+          </div>
+          <p id="domain-legend" class="info legend">
+            Spiegel bilden den Rand (<b class="c-mirror">blau</b>), Drehzentren und Spiegelecken die Ecken.
+            Gleich markierte Kanten werden verklebt: durch eine <b>Drehung</b>, eine
+            <b class="c-translation">Translation</b> oder eine <b class="c-glide">Gleitspiegelung</b> (gestrichelt);
+            der Pfeil zeigt die Richtung. p wählt, welche Kopie gezeigt wird.
+          </p>
           <label class="row">
             Wortlänge ≤ <b id="length-value">0</b>
             <button id="play" title="Schrittweise aufbauen">▶</button>

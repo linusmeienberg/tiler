@@ -4,14 +4,22 @@
  * cover a given rectangle. Every group element is exactly one such product, so
  * the copies of D tile the plane.
  */
+import { canonicalDomain, insideConvex, type OrbifoldDomain } from "./canonical";
 import { construct, type Construction } from "./construction";
 import type { Realization } from "./groups";
-import { apply, compose, translation, type Isometry, type Point } from "./isometry";
+import { apply, compose, inverse, translation, type Isometry, type Point } from "./isometry";
+import { inventory } from "./inventory";
+
+export type DomainMode = "voronoi" | "orbifold";
 
 export interface Tiling {
   realization: Realization;
   base: Point; // p, in world coordinates
   domain: Point[];
+  /** Set when the canonical domain is used: edge roles and singular points for drawing. */
+  orbifold: OrbifoldDomain | null;
+  /** Why the orbifold was not available (the Voronoi cell is used instead). */
+  orbifoldError: string | null;
   centroid: Point;
   /** Max distance of a domain vertex from the centroid. */
   reach: number;
@@ -25,15 +33,27 @@ export interface Rect {
 }
 
 /** Fractional coordinates (u, v) of p in the lattice basis → tiling, or null if p lies on a symmetry element. */
-export function buildTiling(realization: Realization, baseFrac: Point): Tiling | null {
+export function buildTiling(realization: Realization, baseFrac: Point, mode: DomainMode = "voronoi"): Tiling | null {
   const { a1, a2 } = realization;
   const base = { x: baseFrac.x * a1.x + baseFrac.y * a2.x, y: baseFrac.x * a1.y + baseFrac.y * a2.y };
   const cell = Math.hypot(a1.x, a1.y) + Math.hypot(a2.x, a2.y);
   const c = construct(realization.generators, base, { radius: 3 * cell });
   if (c.onElement || c.copiesPerCell === null) return null;
-  const centroid = polygonCentroid(c.domain);
-  const reach = Math.max(...c.domain.map((v) => Math.hypot(v.x - centroid.x, v.y - centroid.y)));
-  return { realization, base, domain: c.domain, centroid, reach };
+  let domain = c.domain;
+  let orbifold: OrbifoldDomain | null = null;
+  let orbifoldError: string | null = null;
+  if (mode === "orbifold") {
+    const inv = inventory(c, base);
+    const r = inv ? canonicalDomain(c, inv, base) : { error: "keine Inventur" };
+    if ("error" in r) orbifoldError = r.error;
+    else {
+      domain = r.domain.polygon;
+      orbifold = r.domain;
+    }
+  }
+  const centroid = polygonCentroid(domain);
+  const reach = Math.max(...domain.map((v) => Math.hypot(v.x - centroid.x, v.y - centroid.y)));
+  return { realization, base, domain, orbifold, orbifoldError, centroid, reach };
 }
 
 /**
@@ -112,9 +132,11 @@ export function visibleCopies(t: Tiling, rect: Rect, max = 6000): Isometry[] | n
   return out;
 }
 
-/** The copy containing q: the one whose image of p is nearest (Dirichlet property). */
+/** The copy containing q (point in polygon; for the Voronoi cell also the one with the nearest image of p). */
 export function copyAt(t: Tiling, q: Point): Isometry {
   const near = visibleCopies(t, { x0: q.x, y0: q.y, x1: q.x, y1: q.y }) ?? [];
+  const containing = near.find((g) => insideConvex(apply(inverse(g), q), t.domain, 1e-9));
+  if (containing) return containing;
   let best = near[0];
   let bestDist = Infinity;
   for (const g of near) {

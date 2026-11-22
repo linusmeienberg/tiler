@@ -1,4 +1,5 @@
 /** Rendering of image, lattice, symmetry elements and the construction onto the canvas. */
+import type { OrbifoldDomain } from "./canonical";
 import type { Construction } from "./construction";
 import type { Inventory } from "./inventory";
 import type { Point } from "./isometry";
@@ -27,6 +28,9 @@ export const CLASS_COLORS = ["#0891b2", "#c026d3", "#65a30d", "#ea580c", "#4f46e
 /** What to show of the construction (orbit, Dirichlet domain and its copies). */
 export interface CoverState {
   construction: Construction;
+  /** The fundamental domain shown: the Voronoi cell of p or the canonical (orbifold) one. */
+  domain: Point[];
+  orbifold: OrbifoldDomain | null;
   base: Point;
   /** Show copies g(D) and orbit points g(p) with word length ≤ maxLength. */
   maxLength: number;
@@ -146,13 +150,14 @@ export function lengthColor(length: number, maxLength: number): string {
 function drawCover(ctx: CanvasRenderingContext2D, st: DrawState, cover: CoverState): void {
   const { construction: c, maxLength } = cover;
   const { view, width, height } = st;
-  const domainReach = Math.max(...c.domain.map((v) => Math.hypot(v.x - cover.base.x, v.y - cover.base.y))) * view.scale;
+  const domain = cover.domain;
+  const domainReach = Math.max(...domain.map((v) => Math.hypot(v.x - cover.base.x, v.y - cover.base.y))) * view.scale;
   const visible = (s: Point) =>
     s.x > -domainReach && s.x < width + domainReach && s.y > -domainReach && s.y < height + domainReach;
   const polygon = (i: number) => {
     const g = c.elements[i].g;
     ctx.beginPath();
-    c.domain.forEach((v, k) => {
+    domain.forEach((v, k) => {
       const w = g.a * v.x + g.b * v.y + g.tx;
       const z = g.c * v.x + g.d * v.y + g.ty;
       const s = toScreen(view, { x: w, y: z });
@@ -178,11 +183,12 @@ function drawCover(ctx: CanvasRenderingContext2D, st: DrawState, cover: CoverSta
     ctx.restore();
   }
 
-  // The domain itself, and the copy under the cursor.
-  haloStroke(ctx, () => polygon(0), "#111", 2.5);
+  // The copy under the cursor, and the domain itself.
   if (cover.hovered !== null && cover.hovered > 0 && c.elements[cover.hovered].length <= maxLength) {
     haloStroke(ctx, () => polygon(cover.hovered!), COLORS.hover, 2.5);
   }
+  if (cover.orbifold) drawOrbifold(ctx, (w) => toScreen(view, w), cover.orbifold);
+  else haloStroke(ctx, () => polygon(0), "#111", 2.5);
 
   if (cover.showOrbit) {
     ctx.save();
@@ -422,4 +428,72 @@ export function label(ctx: CanvasRenderingContext2D, text: string, p: Point, col
   ctx.strokeText(text, p.x + 10, p.y - 10);
   ctx.fillStyle = color;
   ctx.fillText(text, p.x + 10, p.y - 10);
+}
+
+// --- canonical (orbifold) domain -----------------------------------------------------
+
+export const GLUE_COLORS = { rotation: "#111", translation: COLORS.lattice, glide: COLORS.glide };
+
+/**
+ * The orbifold drawn into the pattern: mirror edges thick blue; glued edges
+ * colored by how they are glued, with matching tick marks (1, 2, 3 … ticks per
+ * pair) and an arrow showing which way round they are glued; cone points and
+ * mirror corners in the color of their class.
+ */
+export function drawOrbifold(ctx: CanvasRenderingContext2D, toScreenFn: (w: Point) => Point, d: OrbifoldDomain): void {
+  const pts = d.polygon.map(toScreenFn);
+  const n = pts.length;
+  d.edges.forEach((e, i) => {
+    const a = pts[i];
+    const b = pts[(i + 1) % n];
+    const segment = () => {
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+    };
+    if (e.kind === "mirror") {
+      haloStroke(ctx, segment, COLORS.mirror, 4);
+      return;
+    }
+    if (e.kind === "open") {
+      haloStroke(ctx, segment, "#dc2626", 2, [4, 4]);
+      return;
+    }
+    const color = GLUE_COLORS[e.via ?? "rotation"];
+    haloStroke(ctx, segment, color, 2, e.via === "glide" ? [7, 4] : []);
+    // Marks at the midpoint: an arrow along the gluing direction, then the ticks.
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    if (len < 24) return;
+    const dir = e.forward ? { x: (b.x - a.x) / len, y: (b.y - a.y) / len } : { x: (a.x - b.x) / len, y: (a.y - b.y) / len };
+    const perp = { x: -dir.y, y: dir.x };
+    const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    const ticks = Math.min((e.pair ?? 0) + 1, 4);
+    haloStroke(
+      ctx,
+      () => {
+        const tip = { x: m.x + dir.x * 6, y: m.y + dir.y * 6 };
+        ctx.moveTo(tip.x - dir.x * 7 + perp.x * 6, tip.y - dir.y * 7 + perp.y * 6);
+        ctx.lineTo(tip.x, tip.y);
+        ctx.lineTo(tip.x - dir.x * 7 - perp.x * 6, tip.y - dir.y * 7 - perp.y * 6);
+        for (let k = 0; k < ticks; k++) {
+          const c = { x: m.x - dir.x * (6 + 5 * k), y: m.y - dir.y * (6 + 5 * k) };
+          ctx.moveTo(c.x + perp.x * 6, c.y + perp.y * 6);
+          ctx.lineTo(c.x - perp.x * 6, c.y - perp.y * 6);
+        }
+      },
+      color,
+      2,
+    );
+  });
+  for (const v of d.singular) {
+    const s = toScreenFn(v.point);
+    const color = CLASS_COLORS[v.classIndex % CLASS_COLORS.length];
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, 11, 0, 2 * Math.PI);
+    ctx.fillStyle = "white";
+    ctx.fill();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = color;
+    ctx.stroke();
+    glyph(ctx, s, v.order as RotationOrder, color, 0.65);
+  }
 }

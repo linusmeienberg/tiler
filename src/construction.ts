@@ -165,7 +165,7 @@ export function polygonArea(polygon: Point[]): number {
 }
 
 /** Keep the part of a convex polygon on the side of the line (through mid, ⟂ normal) opposite to normal. */
-function clipByHalfPlane(polygon: Point[], mid: Point, normal: Point): Point[] {
+export function clipByHalfPlane(polygon: Point[], mid: Point, normal: Point): Point[] {
   const side = (v: Point) => (v.x - mid.x) * normal.x + (v.y - mid.y) * normal.y;
   const out: Point[] = [];
   for (let i = 0; i < polygon.length; i++) {

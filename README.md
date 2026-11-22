@@ -50,11 +50,23 @@ npm run dev       # http://localhost:5173
    - zeigt den Fundamentalbereich D (Dirichlet-Bereich von p) und seine Kopien;
    - der Regler baut die Kopien schrittweise nach Wortlänge in den Erzeugern auf;
    - unter dem Zeiger steht das Gruppenelement, das D in diese Kopie abbildet.
-6. **Prüfung am Bild:**
+6. **Fundamentalbereich wählen:** neben der Voronoi-Zelle von p gibt es den
+   **Orbifold**, also den kanonischen Bereich der Gruppe:
+   - Spiegel bilden seinen Rand.
+   - Drehzentren und Spiegelecken sind seine Ecken, eingefärbt nach Bahnklasse.
+   - Die übrigen Kanten sind paarweise markiert. Gleiche Striche bedeuten
+     verklebt, und zwar durch eine Drehung (schwarz), eine Translation
+     (violett) oder eine Gleitspiegelung (grün gestrichelt). Der Pfeil zeigt die
+     Richtung.
+   - p wählt die Kopie.
+
+   Kopien, Prüfung am Bild und Generierung arbeiten mit jedem der beiden
+   Bereiche.
+7. **Prüfung am Bild:**
    - »Aus D« setzt das Bild nur aus dem Inhalt von D zusammen.
    - »Differenz« zeigt, wo das vom Original abweicht.
    - Als Vergleichsmaßstab dient das Bild, gegen sich selbst verschoben.
-7. **In Generierung übernehmen:** Die erkannte Gruppe, p und das Bild wandern in
+8. **In Generierung übernehmen:** Die erkannte Gruppe, p und das Bild wandern in
    den Generierungsmodus.
 
 ## Generierung
@@ -65,7 +77,9 @@ npm run dev       # http://localhost:5173
   - Ziehen verschiebt das Motiv. Auch in gespiegelten oder gedrehten Kopien
     folgt es dem Zeiger.
   - Größe und Drehung stellt man mit Reglern ein.
-- **Form von D:** Den Punkt p ziehen ändert sie.
+- **Form von D:** Voronoi-Zelle von p oder Orbifold, wie in der Analyse.
+  Den Punkt p ziehen ändert die Form der Voronoi-Zelle bzw. wählt die Kopie
+  des Orbifolds.
 - **Export des sichtbaren Ausschnitts:**
   - Ist das Motiv ein SVG, entsteht ein SVG. Das Motiv steht darin einmal in
     `<defs>`, jede Kopie ist ein `<use>` mit Transformation und Clip auf D.
@@ -93,6 +107,20 @@ Zoomen: ⌘/Strg und scrollen. »Einpassen«: Taste F.
     paralleler Spiegel.
   - Ein x gibt es, wenn eine Gleitspiegelung die spiegelfreie Kammer von p auf
     sich abbildet. Wie viele es sind, folgt aus der Preisprobe.
+- **Orbifold** (`src/canonical.ts`): eine Konstruktion für alle 17 Gruppen.
+  - Mit Spiegeln: die Spiegelkammer um p.
+    - Liegt darin eine Kegelspitze der Ordnung n, wird ein 1/n-Keil der Kammer
+      genommen.
+    - Bei parallelen Spiegeln: eine Periode des Streifens, geschnitten an
+      Drehzentren bzw. an der Gleitachse.
+  - Ohne Spiegel: die Voronoi-Zelle eines Zentrums höchster Ordnung unter seiner
+    eigenen Bahn, in n Keile geschnitten. Die Strahlen laufen durch die Zentren
+    niedrigster Ordnung, für 442 ergibt das das Viereck 4-2-4-2.
+  - Sonst: ein Streifen zwischen Gleitachsen bzw. das Gitterparallelogramm.
+  - Die Partnerkanten findet das Tool unter den Gruppenelementen.
+  - Getestet für alle 17 Gruppen an mehreren Startpunkten: genau einmal
+    pflasternd, jede Kante Spiegel oder verklebt, kein Spiegel im Inneren, jede
+    Klasse als Ecke.
 - **Die 17 Gruppen** (`src/groups.ts`):
   - Jede ist als Gittertyp plus Nebenklassenvertreter in Gitterkoordinaten
     abgelegt.
@@ -115,6 +143,7 @@ npm run preview   # den Build lokal ansehen
 | `src/isometry.ts`, `src/group.ts` | Isometrien, Gruppenerzeugung |
 | `src/construction.ts` | Bahn, Dirichlet-Bereich, Warnungen |
 | `src/inventory.ts`, `src/orbifold.ts` | Conway-Notation, Preisprobe |
+| `src/canonical.ts` | kanonischer Fundamentalbereich (Orbifold) mit Verklebungen |
 | `src/overlay.ts` | Prüfung am Bild |
 | `src/groups.ts`, `src/tiling.ts` | die 17 Gruppen, Pflasterung für die Generierung |
 | `src/scene.ts`, `src/view.ts` | eingezeichnete Elemente, Einrasten; Verschieben und Zoomen |

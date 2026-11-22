@@ -5,10 +5,10 @@
  * State and drawing live here; main.ts routes input and owns the shared canvas,
  * view and image loading.
  */
-import { CLASS_COLORS, haloStroke, label } from "./draw";
+import { CLASS_COLORS, drawOrbifold, haloStroke, label } from "./draw";
 import { DEFAULT_PARAMS, findGroup, GROUPS, realize, type LatticeParams, type Realization } from "./groups";
 import { apply, inverse, type Isometry, type Point } from "./isometry";
-import { buildTiling, copyAt, toFractional, visibleCopies, type Tiling } from "./tiling";
+import { buildTiling, copyAt, toFractional, visibleCopies, type DomainMode, type Tiling } from "./tiling";
 import { toScreen, toWorld, type View } from "./view";
 
 const STORAGE_KEY = "tiler.generate";
@@ -34,6 +34,7 @@ interface Settings {
   base: Point; // fractional coordinates of p
   motif: Motif | null; // null: fit into D when an image arrives
   showEdges: boolean;
+  domainMode: DomainMode;
 }
 
 const DEFAULTS: Settings = {
@@ -43,6 +44,7 @@ const DEFAULTS: Settings = {
   base: { x: 0.2137, y: 0.1312 },
   motif: null,
   showEdges: false,
+  domainMode: "voronoi",
 };
 
 let settings: Settings = load();
@@ -77,12 +79,12 @@ function realization(): Realization {
 }
 
 export function tiling(): Tiling | null {
-  const key = JSON.stringify([settings.group, settings.params, settings.custom?.label ?? null, settings.base]);
+  const key = JSON.stringify([settings.group, settings.params, settings.custom?.label ?? null, settings.base, settings.domainMode]);
   if (key !== cache.key) {
     const r = realization();
-    let t = buildTiling(r, settings.base);
+    let t = buildTiling(r, settings.base, settings.domainMode);
     // p on a symmetry element (e.g. after changing the group): fall back to the default.
-    if (!t) t = buildTiling(r, DEFAULTS.base);
+    if (!t) t = buildTiling(r, DEFAULTS.base, settings.domainMode);
     cache = { key, tiling: t };
   }
   return cache.tiling;
@@ -293,7 +295,8 @@ export function draw(ctx: CanvasRenderingContext2D, view: View, width: number, h
     }
     ctx.restore();
   }
-  haloStroke(ctx, () => screenPolygon({ a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 }), "#111", 2.5);
+  if (t.orbifold) drawOrbifold(ctx, (w) => toScreen(view, w), t.orbifold);
+  else haloStroke(ctx, () => screenPolygon({ a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 }), "#111", 2.5);
 
   const b = toScreen(view, t.base);
   ctx.beginPath();
@@ -365,6 +368,14 @@ export function setupPanel(changed: () => void): void {
   ];
   syncSliders = () => sync.forEach((f) => f());
 
+  for (const btn of document.querySelectorAll<HTMLButtonElement>("#gen-domain-mode button")) {
+    btn.addEventListener("click", () => {
+      settings.domainMode = btn.dataset.domain as DomainMode;
+      save();
+      changed();
+    });
+  }
+
   $("#gen-fit-motif").addEventListener("click", () => {
     fitMotif();
     changed();
@@ -400,6 +411,11 @@ export function renderPanel(): void {
   $("#gen-angle-value").textContent = `${Math.round(settings.params.angleDeg)}°`;
   $("#gen-scale-value").textContent = settings.motif ? `${(settings.motif.scale * 100).toFixed(0)} %` : "";
   $("#gen-rotation-value").textContent = settings.motif ? `${Math.round(settings.motif.rotationDeg)}°` : "";
+  for (const btn of document.querySelectorAll<HTMLButtonElement>("#gen-domain-mode button")) {
+    btn.classList.toggle("active", btn.dataset.domain === settings.domainMode);
+  }
+  $("#gen-domain-legend").hidden = settings.domainMode !== "orbifold";
+  $("#gen-domain-error").textContent = t?.orbifoldError ? `${t.orbifoldError} Gezeigt wird der Voronoi-Bereich.` : "";
   $("#gen-motif").hidden = !motifImage;
   $("#export").hidden = !motifImage;
   $("#gen-no-motif").hidden = !!motifImage;
