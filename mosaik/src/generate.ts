@@ -6,8 +6,8 @@
  * view and image loading.
  */
 import { CLASS_COLORS, haloStroke, label } from "./draw";
-import { DEFAULT_PARAMS, findGroup, GROUPS, type LatticeParams } from "./groups";
-import { apply, inverse, type Point } from "./isometry";
+import { DEFAULT_PARAMS, findGroup, GROUPS, realize, type LatticeParams, type Realization } from "./groups";
+import { apply, inverse, type Isometry, type Point } from "./isometry";
 import { buildTiling, copyAt, toFractional, visibleCopies, type Tiling } from "./tiling";
 import { toScreen, toWorld, type View } from "./view";
 
@@ -21,9 +21,16 @@ interface Motif {
   rotationDeg: number;
 }
 
+/** A group taken over from the analysis: fixed lattice and cosets. */
+interface CustomGroup {
+  realization: Realization;
+  label: string; // e.g. "*442 (p4m)"
+}
+
 interface Settings {
   group: string;
   params: LatticeParams;
+  custom: CustomGroup | null; // overrides group/params while set
   base: Point; // fractional coordinates of p
   motif: Motif | null; // null: fit into D when an image arrives
   showEdges: boolean;
@@ -32,6 +39,7 @@ interface Settings {
 const DEFAULTS: Settings = {
   group: "*442",
   params: DEFAULT_PARAMS,
+  custom: null,
   base: { x: 0.2137, y: 0.1312 },
   motif: null,
   showEdges: false,
@@ -39,6 +47,8 @@ const DEFAULTS: Settings = {
 
 let settings: Settings = load();
 let motifImage: HTMLCanvasElement | null = null; // pre-rasterized (SVGs are slow to redraw hundreds of times)
+/** The motif's SVG source, if it is one: then the export is an SVG too. */
+let motifSvg: { text: string; width: number; height: number } | null = null;
 let cache: { key: string; tiling: Tiling | null } = { key: "", tiling: null };
 
 type Drag = { type: "motif"; start: Point; startMotif: Motif; inv: { a: number; b: number; c: number; d: number } } | { type: "base" };
@@ -62,12 +72,17 @@ function save(): void {
   }
 }
 
+function realization(): Realization {
+  return settings.custom?.realization ?? realize(findGroup(settings.group), settings.params);
+}
+
 export function tiling(): Tiling | null {
-  const key = JSON.stringify([settings.group, settings.params, settings.base]);
+  const key = JSON.stringify([settings.group, settings.params, settings.custom?.label ?? null, settings.base]);
   if (key !== cache.key) {
-    let t = buildTiling(settings.group, settings.params, settings.base);
+    const r = realization();
+    let t = buildTiling(r, settings.base);
     // p on a symmetry element (e.g. after changing the group): fall back to the default.
-    if (!t) t = buildTiling(settings.group, settings.params, DEFAULTS.base);
+    if (!t) t = buildTiling(r, DEFAULTS.base);
     cache = { key, tiling: t };
   }
   return cache.tiling;
@@ -75,14 +90,28 @@ export function tiling(): Tiling | null {
 
 // --- motif ---------------------------------------------------------------------------
 
-export function setMotifImage(img: HTMLImageElement): void {
+export function setMotifImage(img: HTMLImageElement, svgText: string | null = null, fit = true): void {
+  motifSvg = svgText ? { text: svgText, width: img.naturalWidth, height: img.naturalHeight } : null;
   const k = Math.min(1, MAX_MOTIF_SIDE / Math.max(img.naturalWidth, img.naturalHeight));
   const c = document.createElement("canvas");
   c.width = Math.max(1, Math.round(img.naturalWidth * k));
   c.height = Math.max(1, Math.round(img.naturalHeight * k));
   c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height);
   motifImage = c;
-  fitMotif();
+  if (fit) fitMotif();
+}
+
+/**
+ * Take over the analysis: its group (lattice + cosets), its p and its image,
+ * placed exactly where it was – so the tiling starts out as the analysis'
+ * reconstruction of the image from D.
+ */
+export function importFromAnalysis(r: Realization, label: string, base: Point, img: HTMLImageElement, svgText: string | null): void {
+  settings.custom = { realization: r, label };
+  settings.base = toFractional(r, base);
+  setMotifImage(img, svgText, false);
+  settings.motif = { x: img.naturalWidth / 2, y: img.naturalHeight / 2, scale: img.naturalWidth / motifImage!.width, rotationDeg: 0 };
+  save();
 }
 
 export function hasMotif(): boolean {
@@ -149,7 +178,7 @@ export function pointerMove(view: View, s: Point): void {
     if (!t) return;
     const frac = toFractional(t.realization, w);
     // Keep p only where it gives a proper domain (not on a mirror or center).
-    if (buildTiling(settings.group, settings.params, frac)) settings.base = frac;
+    if (buildTiling(realization(), frac)) settings.base = frac;
   }
 }
 
@@ -164,10 +193,15 @@ export function isDragging(): boolean {
 
 // --- drawing -----------------------------------------------------------------------
 
-export function draw(ctx: CanvasRenderingContext2D, view: View, width: number, height: number, dpr: number): void {
+/** `decorations`: D's outline, p, copy borders and drag preview (off for export). */
+export function draw(ctx: CanvasRenderingContext2D, view: View, width: number, height: number, dpr: number, decorations = true): void {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.fillStyle = "#e7e5e4";
-  ctx.fillRect(0, 0, width, height);
+  if (decorations) {
+    ctx.fillStyle = "#e7e5e4";
+    ctx.fillRect(0, 0, width, height);
+  } else {
+    ctx.clearRect(0, 0, width, height);
+  }
   const t = tiling();
   if (!t) return;
 
@@ -227,6 +261,7 @@ export function draw(ctx: CanvasRenderingContext2D, view: View, width: number, h
     ctx.restore();
   });
   ctx.restore();
+  if (!decorations) return;
 
   // While dragging the motif: show all of it faintly, also outside D.
   if (motif && drag?.type === "motif") {
@@ -278,7 +313,12 @@ const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel)
 /** Wire the panel controls; `changed` re-renders. */
 export function setupPanel(changed: () => void): void {
   const select = $<HTMLSelectElement>("#gen-group");
+  const fromAnalysis = document.createElement("option");
+  fromAnalysis.value = "";
+  fromAnalysis.textContent = "aus der Analyse";
+  fromAnalysis.disabled = true;
   select.replaceChildren(
+    fromAnalysis,
     ...GROUPS.map((g) => {
       const o = document.createElement("option");
       o.value = g.conway;
@@ -288,6 +328,7 @@ export function setupPanel(changed: () => void): void {
   );
   select.addEventListener("change", () => {
     settings.group = select.value;
+    settings.custom = null;
     fitMotif(); // the new D is elsewhere and shaped differently
     save();
     changed();
@@ -342,9 +383,17 @@ let syncSliders = () => {};
 export function renderPanel(): void {
   const t = tiling();
   const group = findGroup(settings.group);
-  $<HTMLSelectElement>("#gen-group").value = group.conway;
-  $("#gen-row-ratio").hidden = !["oblique", "rect", "centered"].includes(group.lattice);
-  $("#gen-row-angle").hidden = group.lattice !== "oblique";
+  const custom = settings.custom;
+  const select = $<HTMLSelectElement>("#gen-group");
+  select.value = custom ? "" : group.conway;
+  $("#gen-custom").hidden = !custom;
+  $("#gen-custom").textContent = custom
+    ? `Aus der Analyse übernommen: ${custom.label}, Gitter und Lage wie eingezeichnet. Eine Gruppe wählen, um frei weiterzumachen.`
+    : "";
+  $("#gen-row-size").hidden = !!custom;
+  $("#gen-row-ratio").hidden = !!custom || !["oblique", "rect", "centered"].includes(group.lattice);
+  $("#gen-row-angle").hidden = !!custom || group.lattice !== "oblique";
+  $("#export").textContent = motifSvg ? "Ausschnitt als SVG speichern" : "Ausschnitt als PNG speichern";
   syncSliders();
   $("#gen-size-value").textContent = `${Math.round(settings.params.size)} px`;
   $("#gen-ratio-value").textContent = settings.params.ratio.toFixed(2);
@@ -352,8 +401,11 @@ export function renderPanel(): void {
   $("#gen-scale-value").textContent = settings.motif ? `${(settings.motif.scale * 100).toFixed(0)} %` : "";
   $("#gen-rotation-value").textContent = settings.motif ? `${Math.round(settings.motif.rotationDeg)}°` : "";
   $("#gen-motif").hidden = !motifImage;
+  $("#export").hidden = !motifImage;
   $("#gen-no-motif").hidden = !!motifImage;
-  if (t) {
+  if (t && custom) {
+    $("#gen-info").textContent = `D hat ${t.domain.length} Ecken · ${t.realization.cosets.length} Kopien von D pro primitiver Zelle`;
+  } else if (t) {
     const lattice = { oblique: "schiefwinklig", rect: "rechtwinklig", centered: "rechtwinklig zentriert", square: "quadratisch", hex: "hexagonal" }[group.lattice];
     const perCell = t.realization.cosets.length / (group.lattice === "centered" ? 2 : 1);
     $("#gen-info").textContent = `Gitter ${lattice} · D hat ${t.domain.length} Ecken · ${perCell} Kopien von D pro primitiver Zelle`;
@@ -362,3 +414,87 @@ export function renderPanel(): void {
 
 export const STATUS =
   "Ziehen verschiebt das Motiv (in jeder Kopie) · p ziehen ändert die Form von D · Leertaste/rechte Maustaste + Ziehen verschiebt die Ansicht · Scrollen verschiebt, ⌘+Scrollen zoomt";
+
+// --- export --------------------------------------------------------------------------
+
+export interface Export {
+  blob: Blob;
+  filename: string;
+}
+
+/** The visible part of the tiling: SVG if the motif is an SVG, else PNG (at twice the screen resolution). */
+export async function exportView(view: View, width: number, height: number): Promise<Export | null> {
+  const t = tiling();
+  if (!t || !motifImage || !settings.motif) return null;
+  // Crystallographic name (p4m), as the Conway symbol has * in it.
+  const iuc = settings.custom ? (/\((\w+)\)/.exec(settings.custom.label)?.[1] ?? "gruppe") : findGroup(settings.group).iuc;
+  const name = `mosaik-${iuc}`;
+  if (motifSvg) {
+    const svg = tilingSvg(t, view, width, height);
+    return svg ? { blob: new Blob([svg], { type: "image/svg+xml" }), filename: `${name}.svg` } : null;
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(width * 2);
+  canvas.height = Math.round(height * 2);
+  draw(canvas.getContext("2d")!, view, width, height, 2, false);
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+  return blob ? { blob, filename: `${name}.png` } : null;
+}
+
+const num = (x: number) => String(Math.round(x * 1e4) / 1e4);
+
+/**
+ * Vector output: the motif's SVG once in <defs>, and per copy a <use> under the
+ * copy's transform, clipped to D. Stays vector and small.
+ */
+export function tilingSvg(t: Tiling, view: View, width: number, height: number): string | null {
+  const m = settings.motif;
+  if (!m || !motifSvg || !motifImage) return null;
+  const tl = toWorld(view, { x: 0, y: 0 });
+  const br = toWorld(view, { x: width, y: height });
+  const copies = visibleCopies(t, { x0: tl.x, y0: tl.y, x1: br.x, y1: br.y }, 20000);
+  if (!copies) return null;
+
+  const doc = new DOMParser().parseFromString(motifSvg.text, "image/svg+xml");
+  const root = doc.documentElement;
+  if (root.nodeName !== "svg") return null;
+  root.setAttribute("width", String(motifSvg.width));
+  root.setAttribute("height", String(motifSvg.height));
+  root.removeAttribute("x");
+  root.removeAttribute("y");
+  const inner = new XMLSerializer().serializeToString(root);
+
+  // World units per SVG unit: the canvas draws the rasterized motif (motifImage) at m.scale.
+  const k = (m.scale * motifImage.width) / motifSvg.width;
+  const motifTransform =
+    `translate(${num(m.x)} ${num(m.y)}) rotate(${num(m.rotationDeg)}) ` +
+    `scale(${num(k)}) translate(${num(-motifSvg.width / 2)} ${num(-motifSvg.height / 2)})`;
+  // D grown by half an output pixel against hairline seams (neighbours agree there anyway).
+  const grow = 0.5 / view.scale;
+  const d =
+    t.domain
+      .map((v, i) => {
+        const dx = v.x - t.centroid.x;
+        const dy = v.y - t.centroid.y;
+        const len = Math.hypot(dx, dy) || 1;
+        return `${i === 0 ? "M" : "L"}${num(v.x + (dx / len) * grow)} ${num(v.y + (dy / len) * grow)}`;
+      })
+      .join(" ") + " Z";
+  const matrix = (g: Isometry) => `matrix(${[g.a, g.c, g.b, g.d, g.tx, g.ty].map(num).join(" ")})`;
+  const uses = copies.map((g) => `<use href="#mosaik-motif" xlink:href="#mosaik-motif" transform="${matrix(g)}" clip-path="url(#mosaik-D)"/>`);
+  // clip-path on a transformed <use>: the clip is in the use's own user space,
+  // i.e. before its transform – so D is given in source coordinates.
+
+  return [
+    `<?xml version="1.0" encoding="UTF-8"?>`,
+    `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" ` +
+      `width="${Math.round(width)}" height="${Math.round(height)}" ` +
+      `viewBox="${num(tl.x)} ${num(tl.y)} ${num(br.x - tl.x)} ${num(br.y - tl.y)}">`,
+    `<defs>`,
+    `<clipPath id="mosaik-D" clipPathUnits="userSpaceOnUse"><path d="${d}"/></clipPath>`,
+    `<g id="mosaik-motif" transform="${motifTransform}">${inner}</g>`,
+    `</defs>`,
+    ...uses,
+    `</svg>`,
+  ].join("\n");
+}

@@ -94,6 +94,14 @@ Generierungsmodus:
   nach Gittertyp, Motiv verschieben (in jeder Kopie folgt es dem Zeiger), Größe,
   Drehung, p ziehen ändert die Form von D. Einstellungen im localStorage.
 - Umschalter oben links; Ansicht und Zustand bleiben je Modus erhalten.
+- »In Generierung übernehmen« (Analyse, Prüfung am Bild): die erkannte Gruppe
+  (primitives Gitter + Nebenklassen aus den Gruppenelementen,
+  `realizationFromConstruction`), p und das Bild an seinem Platz – die
+  Pflasterung ist zunächst genau der Aufbau aus D. Motiv und p bleiben frei,
+  eine Gruppe wählen kehrt zur freien Generierung zurück.
+- Export des sichtbaren Ausschnitts: ist das Motiv ein SVG, entsteht ein SVG
+  (Motiv einmal in `<defs>`, pro Kopie ein `<use>` mit Transformation und
+  Clip auf D – bleibt Vektor und klein), sonst ein PNG in doppelter Auflösung.
 
 ## Entwicklung
 

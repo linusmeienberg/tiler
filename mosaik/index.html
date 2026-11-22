@@ -26,7 +26,8 @@
         <div id="side-generate">
           <h2>Gruppe</h2>
           <select id="gen-group"></select>
-          <label class="slider">Zellgröße <span id="gen-size-value"></span><input type="range" id="gen-size" min="40" max="600" step="1" /></label>
+          <p id="gen-custom" class="info"></p>
+          <label class="slider" id="gen-row-size">Zellgröße <span id="gen-size-value"></span><input type="range" id="gen-size" min="40" max="600" step="1" /></label>
           <label class="slider" id="gen-row-ratio">Seitenverhältnis b/a <span id="gen-ratio-value"></span><input type="range" id="gen-ratio" min="0.4" max="2.5" step="0.01" /></label>
           <label class="slider" id="gen-row-angle">Winkel zwischen a und b <span id="gen-angle-value"></span><input type="range" id="gen-angle" min="45" max="90" step="1" /></label>
           <p id="gen-info" class="info"></p>
@@ -39,6 +40,7 @@
             <button id="gen-fit-motif">In D einpassen</button>
           </div>
           <label class="row"><input type="checkbox" id="gen-edges" /> Grenzen der Kopien</label>
+          <button id="export" hidden>Ausschnitt speichern</button>
           <p class="info">Ziehen verschiebt das Motiv – in jeder Kopie folgt es dem Zeiger. Den Punkt p ziehen ändert die Form von D (Dirichlet-Bereich von p).</p>
         </div>
 
@@ -81,6 +83,7 @@
             <button data-mode="original">Original</button><button data-mode="reconstruction">Aus D</button><button data-mode="difference">Differenz</button>
           </div>
           <p id="check-info"></p>
+          <button id="to-generate" title="Gruppe, Fundamentalbereich und Bild in den Generierungsmodus übernehmen">In Generierung übernehmen</button>
         </div>
         </div>
       </aside>

@@ -279,6 +279,12 @@ aside h2:not(:first-child) {
   border-left: none;
 }
 
+#export,
+#to-generate {
+  width: 100%;
+  margin-top: 8px;
+}
+
 #check-info {
   color: #57534e;
 }

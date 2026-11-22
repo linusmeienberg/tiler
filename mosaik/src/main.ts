@@ -5,6 +5,7 @@ import { CLASS_COLORS, COLORS, draw, type CoverState, type ImageMode, type Previ
 import { inventory, type Inventory } from "./inventory";
 import type { Point } from "./isometry";
 import { overlayCheck, type OverlayResult } from "./overlay";
+import { realizationFromConstruction } from "./tiling";
 import {
   addElement,
   describe,
@@ -61,6 +62,7 @@ let tool: Tool = "select";
 let order: RotationOrder = 4;
 let selectedId: number | null = null;
 let image: HTMLImageElement | null = null;
+let imageSvg: string | null = null; // SVG source of the analysis image, if it is one
 let mode: Mode = loadMode();
 let view: View = { scale: 1, ox: 0, oy: 0 };
 const views: Record<Mode, View | null> = { analyse: null, generate: null };
@@ -618,15 +620,19 @@ function fitView(): void {
   requestRender();
 }
 
-function loadImage(url: string): void {
+/** `svg`: the file is an SVG – its source is kept, so the generation export can stay vector. */
+function loadImage(url: string, svg: boolean): void {
   const img = new Image();
-  img.onload = () => {
+  const text = svg ? fetch(url).then((r) => r.text()).catch(() => null) : Promise.resolve(null);
+  img.onload = async () => {
+    const svgText = await text;
     if (mode === "generate") {
-      gen.setMotifImage(img);
+      gen.setMotifImage(img, svgText);
       requestRender();
       return;
     }
     image = img;
+    imageSvg = svgText;
     fitView();
   };
   img.onerror = () => {
@@ -808,7 +814,7 @@ window.addEventListener("blur", () => {
 // Image: file picker, drag & drop, example.
 $<HTMLInputElement>("#file").addEventListener("change", (e) => {
   const file = (e.target as HTMLInputElement).files?.[0];
-  if (file) loadImage(URL.createObjectURL(file));
+  if (file) loadImage(URL.createObjectURL(file), isSvg(file));
 });
 stage.addEventListener("dragover", (e) => {
   e.preventDefault();
@@ -819,11 +825,36 @@ stage.addEventListener("drop", (e) => {
   e.preventDefault();
   stage.classList.remove("dragover");
   const file = e.dataTransfer?.files[0];
-  if (file?.type.startsWith("image/")) loadImage(URL.createObjectURL(file));
+  if (file?.type.startsWith("image/")) loadImage(URL.createObjectURL(file), isSvg(file));
 });
+function isSvg(file: File): boolean {
+  return file.type === "image/svg+xml" || file.name.toLowerCase().endsWith(".svg");
+}
 $("#example").addEventListener("click", () =>
-  loadImage(import.meta.env.BASE_URL + (mode === "generate" ? "motiv.svg" : "beispiel.svg")),
+  loadImage(import.meta.env.BASE_URL + (mode === "generate" ? "motiv.svg" : "beispiel.svg"), true),
 );
+$("#to-generate").addEventListener("click", () => {
+  const c = currentConstruction();
+  const inv = cached.inventory;
+  const r = c && realizationFromConstruction(c);
+  if (!r || !image || !scene.base) return;
+  const label = inv ? `${inv.symbol}${inv.name ? ` (${inv.name})` : ""}` : "eingezeichnete Gruppe";
+  gen.importFromAnalysis(r, label, scene.base, image, imageSvg);
+  setMode("generate");
+  fitView();
+});
+$("#export").addEventListener("click", async () => {
+  const out = await gen.exportView(view, size.width, size.height);
+  if (!out) {
+    status.textContent = "Export nicht möglich (zu weit herausgezoomt?)";
+    return;
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(out.blob);
+  a.download = out.filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+});
 $("#fit").addEventListener("click", fitView);
 $<HTMLInputElement>("#length").addEventListener("input", (e) => {
   stopPlay();
