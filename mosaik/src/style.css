@@ -2,6 +2,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   height: 100%;
@@ -48,6 +52,21 @@ button.active {
   background: #1c1917;
   border-color: #1c1917;
   color: white;
+}
+
+.toolbar-mode {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.segmented.mode {
+  margin: 0;
+}
+
+.segmented.mode button {
+  flex: none;
+  padding: 5px 12px;
 }
 
 .caption {
@@ -266,6 +285,32 @@ aside h2:not(:first-child) {
 
 #group-warnings {
   margin-bottom: 12px;
+}
+
+#gen-group {
+  width: 100%;
+  font: inherit;
+  padding: 4px;
+}
+
+.slider {
+  display: block;
+  margin: 10px 0;
+}
+
+.slider span {
+  float: right;
+  color: #57534e;
+  font-variant-numeric: tabular-nums;
+}
+
+.slider input {
+  display: block;
+  width: 100%;
+}
+
+.info {
+  color: #57534e;
 }
 
 footer {

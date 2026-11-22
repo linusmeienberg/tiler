@@ -7,8 +7,13 @@
   </head>
   <body>
     <header class="toolbar">
-      <div class="group" id="tools"></div>
-      <div class="group" id="orders" title="Ordnung des Drehzentrums (Tasten 2, 3, 4, 6)"><span class="caption">Ordnung</span></div>
+      <div class="segmented mode" id="mode">
+        <button data-mode="analyse" title="Bild laden, Symmetrieelemente einzeichnen, Gruppe prüfen">Analyse</button><button data-mode="generate" title="Gruppe wählen, Motiv in den Fundamentalbereich legen, Ebene pflastern">Generierung</button>
+      </div>
+      <div class="toolbar-mode" id="toolbar-analyse">
+        <div class="group" id="tools"></div>
+        <div class="group" id="orders" title="Ordnung des Drehzentrums (Tasten 2, 3, 4, 6)"><span class="caption">Ordnung</span></div>
+      </div>
       <div class="group">
         <label class="button">Bild laden<input type="file" id="file" accept="image/*" hidden /></label>
         <button id="example">Beispiel</button>
@@ -18,6 +23,26 @@
     <main>
       <div id="stage"><canvas id="canvas"></canvas></div>
       <aside>
+        <div id="side-generate">
+          <h2>Gruppe</h2>
+          <select id="gen-group"></select>
+          <label class="slider">Zellgröße <span id="gen-size-value"></span><input type="range" id="gen-size" min="40" max="600" step="1" /></label>
+          <label class="slider" id="gen-row-ratio">Seitenverhältnis b/a <span id="gen-ratio-value"></span><input type="range" id="gen-ratio" min="0.4" max="2.5" step="0.01" /></label>
+          <label class="slider" id="gen-row-angle">Winkel zwischen a und b <span id="gen-angle-value"></span><input type="range" id="gen-angle" min="45" max="90" step="1" /></label>
+          <p id="gen-info" class="info"></p>
+
+          <h2>Motiv</h2>
+          <p id="gen-no-motif" class="empty">»Bild laden« oder »Beispiel«: das Bild wird in den Fundamentalbereich D gelegt.</p>
+          <div id="gen-motif">
+            <label class="slider">Größe <span id="gen-scale-value"></span><input type="range" id="gen-scale" min="-7" max="4" step="0.01" /></label>
+            <label class="slider">Drehung <span id="gen-rotation-value"></span><input type="range" id="gen-rotation" min="-180" max="180" step="1" /></label>
+            <button id="gen-fit-motif">In D einpassen</button>
+          </div>
+          <label class="row"><input type="checkbox" id="gen-edges" /> Grenzen der Kopien</label>
+          <p class="info">Ziehen verschiebt das Motiv – in jeder Kopie folgt es dem Zeiger. Den Punkt p ziehen ändert die Form von D (Dirichlet-Bereich von p).</p>
+        </div>
+
+        <div id="side-analyse">
         <h2>Erzeuger</h2>
         <ul id="elements"></ul>
         <p class="empty" id="no-elements">Noch keine Elemente.</p>
@@ -56,6 +81,7 @@
             <button data-mode="original">Original</button><button data-mode="reconstruction">Aus D</button><button data-mode="difference">Differenz</button>
           </div>
           <p id="check-info"></p>
+        </div>
         </div>
       </aside>
     </main>

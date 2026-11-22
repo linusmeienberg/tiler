@@ -326,7 +326,7 @@ function drawDerived(ctx: CanvasRenderingContext2D, st: DrawState, inv: Inventor
 
 // --- primitives (all in screen coordinates) -------------------------------------------
 
-function haloStroke(
+export function haloStroke(
   ctx: CanvasRenderingContext2D,
   path: () => void,
   color: string,
@@ -414,7 +414,7 @@ function handle(ctx: CanvasRenderingContext2D, p: Point, color: string, selected
   ctx.stroke();
 }
 
-function label(ctx: CanvasRenderingContext2D, text: string, p: Point, color: string): void {
+export function label(ctx: CanvasRenderingContext2D, text: string, p: Point, color: string): void {
   if (!text) return;
   ctx.font = "600 13px system-ui, sans-serif";
   ctx.lineWidth = 3;

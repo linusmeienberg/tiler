@@ -1,8 +1,12 @@
 # mosaik
 
-Browser-Tool (TypeScript + Canvas): Foto eines periodischen Mosaiks laden,
-Symmetrieelemente einzeichnen und sehen, wie die Ebene aus einem
-Fundamentalbereich durch die Symmetriegruppe aufgebaut wird.
+Browser-Tool (TypeScript + Canvas) mit zwei Arbeitsmodi:
+
+- **Analyse:** Foto eines periodischen Mosaiks laden, Symmetrieelemente
+  einzeichnen, die Gruppe prüfen (Conway-Notation) und das Bild aus dem
+  Fundamentalbereich wieder aufbauen und mit dem Original vergleichen.
+- **Generierung:** eine der 17 Ornamentgruppen wählen, ein Bild als Motiv in den
+  Fundamentalbereich legen und die Ebene damit pflastern.
 
 ## Stand
 
@@ -76,6 +80,20 @@ Schritt 5 – Prüfung am Bild:
   Symmetrie«. Verhältnis < 0,3 gilt als passend, > 0,6 als unpassend (grobe
   Faustregel).
 - Ansichten Original / Aus D / Differenz (rot = Abweichung).
+
+Generierungsmodus:
+
+- `src/groups.ts` – die 17 Gruppen als Tabelle (Gittertyp + Nebenklassen-
+  vertreter in Gitterkoordinaten, aus tiler übernommen, p3m1/p31m korrigiert);
+  `realize()` macht daraus Erzeuger und Nebenklassen für gegebene Gitterparameter.
+  Getestet: Gitter × Nebenklassen pflastern die Ebene genau einmal, und die
+  Inventur erkennt jede Gruppe mit dem richtigen Namen.
+- `src/tiling.ts` – Dirichlet-Bereich D um p, sichtbare Kopien
+  (u·a₁ + v·a₂) ∘ Nebenklasse, Kopie unter einem Punkt.
+- `src/generate.ts` – Bedienung: Gruppe, Zellgröße/Seitenverhältnis/Winkel je
+  nach Gittertyp, Motiv verschieben (in jeder Kopie folgt es dem Zeiger), Größe,
+  Drehung, p ziehen ändert die Form von D. Einstellungen im localStorage.
+- Umschalter oben links; Ansicht und Zustand bleiben je Modus erhalten.
 
 ## Entwicklung
 

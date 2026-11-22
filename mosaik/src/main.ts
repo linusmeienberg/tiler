@@ -24,6 +24,10 @@ import {
   type Scene,
 } from "./scene";
 import { fitRect, toWorld, zoomAt, type View } from "./view";
+import * as gen from "./generate";
+
+type Mode = "analyse" | "generate";
+const MODE_KEY = "mosaik.mode";
 
 type Tool = "select" | "lattice" | "rotation" | "mirror" | "glide" | "base";
 
@@ -57,7 +61,9 @@ let tool: Tool = "select";
 let order: RotationOrder = 4;
 let selectedId: number | null = null;
 let image: HTMLImageElement | null = null;
+let mode: Mode = loadMode();
 let view: View = { scale: 1, ox: 0, oy: 0 };
+const views: Record<Mode, View | null> = { analyse: null, generate: null };
 let size = { width: 0, height: 0, dpr: 1 };
 let pointer: Point | null = null; // screen coordinates
 let spaceDown = false;
@@ -399,6 +405,12 @@ function requestRender(): void {
 }
 
 function render(): void {
+  if (mode === "generate") {
+    gen.draw(ctx, view, size.width, size.height, size.dpr);
+    gen.renderPanel();
+    status.textContent = gen.STATUS;
+    return;
+  }
   let snapIndicator: Point | null = null;
   let ghost: { center: Point; order: RotationOrder } | null = null;
   let preview: Preview | null = null;
@@ -514,7 +526,7 @@ function renderToolbar(): void {
   for (const btn of document.querySelectorAll<HTMLButtonElement>("#orders button")) {
     btn.classList.toggle("active", Number(btn.dataset.order) === order);
   }
-  canvas.style.cursor = tool === "select" ? "default" : "crosshair";
+  canvas.style.cursor = mode === "generate" ? "move" : tool === "select" ? "default" : "crosshair";
 }
 
 // --- actions --------------------------------------------------------------------
@@ -601,13 +613,19 @@ function moveHandle(ref: HandleRef, to: Point): void {
 }
 
 function fitView(): void {
-  if (image) view = fitRect(image.naturalWidth, image.naturalHeight, size.width, size.height);
+  if (mode === "generate") view = gen.fitView(size.width, size.height);
+  else if (image) view = fitRect(image.naturalWidth, image.naturalHeight, size.width, size.height);
   requestRender();
 }
 
 function loadImage(url: string): void {
   const img = new Image();
   img.onload = () => {
+    if (mode === "generate") {
+      gen.setMotifImage(img);
+      requestRender();
+      return;
+    }
     image = img;
     fitView();
   };
@@ -629,6 +647,11 @@ canvas.addEventListener("pointerdown", (e) => {
     return;
   }
   if (e.button !== 0) return;
+  if (mode === "generate") {
+    if (!gen.pointerDown(view, s)) drag = { type: "pan", start: s, startView: view };
+    requestRender();
+    return;
+  }
 
   const w = toWorld(view, s);
   switch (tool) {
@@ -671,6 +694,9 @@ canvas.addEventListener("pointermove", (e) => {
   pointer = s;
   if (drag?.type === "pan") {
     view = { ...drag.startView, ox: drag.startView.ox + s.x - drag.start.x, oy: drag.startView.oy + s.y - drag.start.y };
+  } else if (mode === "generate") {
+    if (!gen.isDragging()) return;
+    gen.pointerMove(view, s);
   } else if (drag?.type === "handle") {
     drag.last = snapped(s, drag.ref).point;
     const ref = drag.ref;
@@ -688,6 +714,7 @@ canvas.addEventListener("pointermove", (e) => {
 });
 
 canvas.addEventListener("pointerup", () => {
+  gen.pointerUp();
   if (drag?.type === "create") finishCreate(drag);
   if (drag?.type === "handle" || drag?.type === "base") changed();
   drag = null;
@@ -728,6 +755,18 @@ window.addEventListener("keydown", (e) => {
     return;
   }
   if (e.metaKey || e.ctrlKey) return;
+
+  if (mode === "generate") {
+    if (e.key === "f" || e.key === "F") fitView();
+    else if (e.key === "+" || e.key === "=") view = zoomAt(view, { x: size.width / 2, y: size.height / 2 }, 1.25);
+    else if (e.key === "-") view = zoomAt(view, { x: size.width / 2, y: size.height / 2 }, 0.8);
+    else if (e.key === " ") {
+      e.preventDefault();
+      spaceDown = true;
+    }
+    requestRender();
+    return;
+  }
 
   const t = TOOLS.find((x) => x.key.toLowerCase() === e.key.toLowerCase());
   if (t) setTool(t.tool);
@@ -782,7 +821,9 @@ stage.addEventListener("drop", (e) => {
   const file = e.dataTransfer?.files[0];
   if (file?.type.startsWith("image/")) loadImage(URL.createObjectURL(file));
 });
-$("#example").addEventListener("click", () => loadImage(import.meta.env.BASE_URL + "beispiel.svg"));
+$("#example").addEventListener("click", () =>
+  loadImage(import.meta.env.BASE_URL + (mode === "generate" ? "motiv.svg" : "beispiel.svg")),
+);
 $("#fit").addEventListener("click", fitView);
 $<HTMLInputElement>("#length").addEventListener("input", (e) => {
   stopPlay();
@@ -848,6 +889,43 @@ new ResizeObserver(() => {
   render();
 }).observe(stage);
 
+// Modes.
+function loadMode(): Mode {
+  try {
+    return localStorage.getItem(MODE_KEY) === "generate" ? "generate" : "analyse";
+  } catch {
+    return "analyse";
+  }
+}
+
+function setMode(m: Mode): void {
+  if (size.width > 0) views[mode] = view;
+  mode = m;
+  try {
+    localStorage.setItem(MODE_KEY, m);
+  } catch {
+    /* ignore */
+  }
+  drag = null;
+  stopPlay();
+  for (const btn of document.querySelectorAll<HTMLButtonElement>("#mode button")) {
+    btn.classList.toggle("active", btn.dataset.mode === m);
+  }
+  $("#toolbar-analyse").hidden = m !== "analyse";
+  $("#side-analyse").hidden = m !== "analyse";
+  $("#side-generate").hidden = m !== "generate";
+  canvas.style.cursor = m === "generate" ? "move" : tool === "select" ? "default" : "crosshair";
+  const saved = views[m];
+  if (saved) view = saved;
+  else if (size.width > 0) fitView();
+  requestRender();
+}
+for (const btn of document.querySelectorAll<HTMLButtonElement>("#mode button")) {
+  btn.addEventListener("click", () => setMode(btn.dataset.mode as Mode));
+}
+gen.setupPanel(requestRender);
+
 renderToolbar();
 renderList();
 setImageMode("original");
+setMode(mode);
