@@ -11,7 +11,7 @@ import { apply, inverse, type Isometry, type Point } from "./isometry";
 import { buildTiling, copyAt, toFractional, visibleCopies, type Tiling } from "./tiling";
 import { toScreen, toWorld, type View } from "./view";
 
-const STORAGE_KEY = "mosaik.generate";
+const STORAGE_KEY = "tiler.generate";
 const MAX_MOTIF_SIDE = 2048;
 
 interface Motif {

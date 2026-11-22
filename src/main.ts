@@ -28,7 +28,7 @@ import { fitRect, toWorld, zoomAt, type View } from "./view";
 import * as gen from "./generate";
 
 type Mode = "analyse" | "generate";
-const MODE_KEY = "mosaik.mode";
+const MODE_KEY = "tiler.mode";
 
 type Tool = "select" | "lattice" | "rotation" | "mirror" | "glide" | "base";
 
@@ -43,7 +43,7 @@ const TOOLS: { tool: Tool; key: string; label: string }[] = [
 
 const SNAP_PX = 12;
 const HIT_PX = 8;
-const STORAGE_KEY = "mosaik.scene";
+const STORAGE_KEY = "tiler.scene";
 
 // --- DOM ------------------------------------------------------------------------
 
