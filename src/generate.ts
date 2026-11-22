@@ -428,7 +428,7 @@ export async function exportView(view: View, width: number, height: number): Pro
   if (!t || !motifImage || !settings.motif) return null;
   // Crystallographic name (p4m), as the Conway symbol has * in it.
   const iuc = settings.custom ? (/\((\w+)\)/.exec(settings.custom.label)?.[1] ?? "gruppe") : findGroup(settings.group).iuc;
-  const name = `mosaik-${iuc}`;
+  const name = `tiler-${iuc}`;
   if (motifSvg) {
     const svg = tilingSvg(t, view, width, height);
     return svg ? { blob: new Blob([svg], { type: "image/svg+xml" }), filename: `${name}.svg` } : null;
@@ -481,7 +481,7 @@ export function tilingSvg(t: Tiling, view: View, width: number, height: number):
       })
       .join(" ") + " Z";
   const matrix = (g: Isometry) => `matrix(${[g.a, g.c, g.b, g.d, g.tx, g.ty].map(num).join(" ")})`;
-  const uses = copies.map((g) => `<use href="#mosaik-motif" xlink:href="#mosaik-motif" transform="${matrix(g)}" clip-path="url(#mosaik-D)"/>`);
+  const uses = copies.map((g) => `<use href="#tiler-motif" xlink:href="#tiler-motif" transform="${matrix(g)}" clip-path="url(#tiler-D)"/>`);
   // clip-path on a transformed <use>: the clip is in the use's own user space,
   // i.e. before its transform – so D is given in source coordinates.
 
@@ -491,8 +491,8 @@ export function tilingSvg(t: Tiling, view: View, width: number, height: number):
       `width="${Math.round(width)}" height="${Math.round(height)}" ` +
       `viewBox="${num(tl.x)} ${num(tl.y)} ${num(br.x - tl.x)} ${num(br.y - tl.y)}">`,
     `<defs>`,
-    `<clipPath id="mosaik-D" clipPathUnits="userSpaceOnUse"><path d="${d}"/></clipPath>`,
-    `<g id="mosaik-motif" transform="${motifTransform}">${inner}</g>`,
+    `<clipPath id="tiler-D" clipPathUnits="userSpaceOnUse"><path d="${d}"/></clipPath>`,
+    `<g id="tiler-motif" transform="${motifTransform}">${inner}</g>`,
     `</defs>`,
     ...uses,
     `</svg>`,

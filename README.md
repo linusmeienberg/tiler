@@ -1,4 +1,4 @@
-# mosaik
+# tiler
 
 Ein Browser-Werkzeug für Symmetrien ebener Ornamente, mit zwei Arbeitsmodi:
 
@@ -127,10 +127,11 @@ Bedienoberfläche ist von Hand und mit Playwright geprüft.
 
 ## Herkunft
 
-Das Projekt begann als Python-Paket `tiler`, ein Jupyter-Widget zum Pflastern
-mit einer vorgegebenen Gruppe. Diese Version ist abgelöst und nur noch in der
-Git-Historie zu finden. Ihre Gruppentabelle lebt in `src/groups.ts` weiter, mit
-einer Korrektur: dort waren p3m1 und p31m vertauscht.
+tiler begann als Python-Paket, ein Jupyter-Widget zum Pflastern mit einer
+vorgegebenen Gruppe. Diese Browser-Version löst es ab; die Python-Fassung ist
+nur noch in der Git-Historie zu finden. Ihre Gruppentabelle lebt in
+`src/groups.ts` weiter, mit einer Korrektur: dort waren p3m1 und p31m
+vertauscht.
 
 ## Lizenz
 

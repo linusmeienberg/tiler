@@ -1,5 +1,5 @@
 {
-  "name": "mosaik",
+  "name": "tiler",
   "version": "0.1.0",
   "description": "Symmetriegruppen von Mosaiken im Browser analysieren und Ornamente aus den 17 Ornamentgruppen erzeugen",
   "license": "MIT",
