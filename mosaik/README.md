@@ -30,6 +30,18 @@ Schritt 2 – Oberfläche (`npm run dev`, dann http://localhost:5173):
   Trefferprüfung, Umwandlung in Erzeuger. `src/draw.ts` – Zeichnen.
   `src/main.ts` – Bedienung. `src/view.ts` – Verschieben/Zoomen.
 
+Schritt 3 – Aufbau aus dem Fundamentalbereich:
+
+- Werkzeug Startpunkt (P) setzt p (klicken oder ziehen, live).
+- `src/construction.ts` – Gruppenelemente um p, Bahn, Dirichlet-Bereich
+  (Halbebenen-Schnitt, nur nahe Bahnpunkte), primitive Translationen aus der
+  Gruppe, »Bereiche pro Zelle« als Probe. Warnungen: Gruppe nicht diskret
+  (Elemente passen nicht zusammen), zu wenige Translationen, p auf einem
+  Symmetrieelement, Bereich lang und schmal.
+- Schieberegler Wortlänge (bzw. [ ]) und ▶ zum schrittweisen Aufbau; Kopien
+  nach Wortlänge eingefärbt. Unter dem Zeiger: die Kopie g(D) und das Wort für g
+  (gefunden als nächster Bahnpunkt – das ist genau die Dirichlet-Eigenschaft).
+
 ## Entwicklung
 
 ```bash

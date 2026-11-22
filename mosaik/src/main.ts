@@ -1,6 +1,7 @@
 /** UI wiring: tools, pointer/keyboard input, image loading, element list. */
 import "./style.css";
-import { COLORS, draw, type Preview } from "./draw";
+import { construct, nearestOrbitIndex, type Construction } from "./construction";
+import { COLORS, draw, type CoverState, type Preview } from "./draw";
 import type { Point } from "./isometry";
 import {
   addElement,
@@ -11,16 +12,18 @@ import {
   hitElement,
   hitHandle,
   labels,
+  latticeBasis,
   removeElement,
   ROTATION_ORDERS,
   snap,
+  toGenerators,
   type HandleRef,
   type RotationOrder,
   type Scene,
 } from "./scene";
 import { fitRect, toWorld, zoomAt, type View } from "./view";
 
-type Tool = "select" | "lattice" | "rotation" | "mirror" | "glide";
+type Tool = "select" | "lattice" | "rotation" | "mirror" | "glide" | "base";
 
 const TOOLS: { tool: Tool; key: string; label: string }[] = [
   { tool: "select", key: "V", label: "Auswahl" },
@@ -28,6 +31,7 @@ const TOOLS: { tool: Tool; key: string; label: string }[] = [
   { tool: "rotation", key: "D", label: "Drehzentrum" },
   { tool: "mirror", key: "S", label: "Spiegelachse" },
   { tool: "glide", key: "G", label: "Gleitachse" },
+  { tool: "base", key: "P", label: "Startpunkt" },
 ];
 
 const SNAP_PX = 12;
@@ -57,10 +61,18 @@ let pointer: Point | null = null; // screen coordinates
 let spaceDown = false;
 let altDown = false;
 
+// Construction display: copies/orbit up to word length `lengthLimit`.
+let lengthLimit = 0;
+let followMax = true; // keep lengthLimit at the maximum when the construction changes
+let showCopies = true;
+let showOrbit = true;
+let playTimer: number | null = null;
+
 type Drag =
   | { type: "pan"; start: Point; startView: View }
   | { type: "handle"; ref: HandleRef; last: Point }
-  | { type: "create"; kind: Preview["kind"]; from: Point; to: Point };
+  | { type: "create"; kind: Preview["kind"]; from: Point; to: Point }
+  | { type: "base" };
 let drag: Drag | null = null;
 
 // --- persistence & undo -----------------------------------------------------------
@@ -118,6 +130,108 @@ function snapped(s: Point, exclude?: HandleRef): { point: Point; snappedTo: Poin
   return { point: target ?? w, snappedTo: target };
 }
 
+// --- construction (orbit, Dirichlet domain, copies) ---------------------------------
+
+let cached: { key: string; construction: Construction | null } = { key: "", construction: null };
+
+/** Recomputed only when elements, start point or image change. */
+function currentConstruction(): Construction | null {
+  const base = scene.base;
+  const generators = toGenerators(scene);
+  if (!base || generators.length === 0) return null;
+  // Keep elements whose copies can reach the image (or a default area without one).
+  const w = image?.naturalWidth ?? 1000;
+  const h = image?.naturalHeight ?? 1000;
+  const reach = Math.max(...[[0, 0], [w, 0], [0, h], [w, h]].map(([x, y]) => Math.hypot(x - base.x, y - base.y)));
+  const radius = 1.2 * reach + 100;
+  const key = JSON.stringify([scene.elements, base, radius]);
+  if (key !== cached.key) {
+    const construction = construct(generators, base, { radius });
+    if (followMax || lengthLimit > construction.maxLength) lengthLimit = construction.maxLength;
+    cached = { key, construction };
+  }
+  return cached.construction;
+}
+
+function setLengthLimit(n: number, c: Construction): void {
+  lengthLimit = Math.max(0, Math.min(n, c.maxLength));
+  followMax = lengthLimit === c.maxLength;
+  requestRender();
+}
+
+function togglePlay(): void {
+  if (playTimer !== null) {
+    stopPlay();
+    return;
+  }
+  const c = currentConstruction();
+  if (!c) return;
+  setLengthLimit(0, c);
+  playTimer = window.setInterval(() => {
+    const now = currentConstruction();
+    if (!now || lengthLimit >= now.maxLength) return stopPlay();
+    setLengthLimit(lengthLimit + 1, now);
+  }, 450);
+  $("#play").textContent = "■";
+}
+
+function stopPlay(): void {
+  if (playTimer !== null) window.clearInterval(playTimer);
+  playTimer = null;
+  $("#play").textContent = "▶";
+}
+
+let shownWarnings = "";
+function renderCoverPanel(c: Construction | null, hovered: number | null): void {
+  $("#cover").hidden = !c;
+  $("#cover-empty").hidden = !!c;
+  if (!c) return;
+
+  const slider = $<HTMLInputElement>("#length");
+  slider.max = String(c.maxLength);
+  slider.value = String(lengthLimit);
+  $("#length-value").textContent = `${lengthLimit} / ${c.maxLength}`;
+
+  const info = [`${c.elements.length} Gruppenelemente`, `Fundamentalbereich mit ${c.domain.length} Ecken`];
+  if (c.copiesPerCell !== null) {
+    info.push(`${formatNumber(c.copiesPerCell)} Bereiche pro primitiver Gitterzelle`);
+    const drawn = latticeBasis(scene);
+    if (drawn && c.translations) {
+      const ratio =
+        Math.abs(drawn.a1.x * drawn.a2.y - drawn.a1.y * drawn.a2.x) /
+        Math.abs(c.translations.t1.x * c.translations.t2.y - c.translations.t1.y * c.translations.t2.x);
+      if (Math.abs(ratio - 1) > 1e-3) info.push(`die gezeichnete Zelle umfasst ${formatNumber(ratio)} primitive Zellen`);
+    }
+  }
+  $("#cover-info").textContent = info.join(" · ");
+
+  let hoverText = "";
+  if (hovered !== null && c.elements[hovered].length <= lengthLimit) {
+    const e = c.elements[hovered];
+    hoverText =
+      hovered === 0
+        ? "Unter dem Zeiger: der Fundamentalbereich D selbst (Wortlänge 0)"
+        : `Unter dem Zeiger: g(D) mit g = ${e.word.join(" · ")} (Wortlänge ${e.length})`;
+  }
+  $("#cover-hover").textContent = hoverText;
+
+  const warnings = c.warnings.join("\n");
+  if (warnings !== shownWarnings) {
+    shownWarnings = warnings;
+    $("#cover-warnings").replaceChildren(
+      ...c.warnings.map((w) => {
+        const li = document.createElement("li");
+        li.textContent = w;
+        return li;
+      }),
+    );
+  }
+}
+
+function formatNumber(x: number): string {
+  return Math.abs(x - Math.round(x)) < 1e-6 ? String(Math.round(x)) : x.toFixed(2);
+}
+
 // --- rendering ------------------------------------------------------------------
 
 let renderQueued = false;
@@ -140,13 +254,22 @@ function render(): void {
     snapIndicator = altDown ? null : snap(scene, drag.to, 1e-9);
   } else if (drag?.type === "handle") {
     snapIndicator = altDown ? null : snap(scene, drag.last, 1e-9, drag.ref);
-  } else if (pointer && !drag && tool !== "select" && !spaceDown) {
+  } else if (pointer && !drag && tool !== "select" && tool !== "base" && !spaceDown) {
     const s = snapped(pointer);
     snapIndicator = s.snappedTo;
     if (tool === "rotation") ghost = { center: s.point, order };
   }
 
-  draw(ctx, { view, ...size, image, scene, selectedId, preview, ghost, snapIndicator });
+  const construction = currentConstruction();
+  let cover: CoverState | null = null;
+  let hovered: number | null = null;
+  if (construction && scene.base) {
+    hovered = pointer ? nearestOrbitIndex(construction.orbit, toWorld(view, pointer)) : null;
+    cover = { construction, base: scene.base, maxLength: lengthLimit, showCopies, showOrbit, hovered };
+  }
+
+  draw(ctx, { view, ...size, image, scene, selectedId, preview, ghost, snapIndicator, cover });
+  renderCoverPanel(construction, hovered);
   renderStatus();
 }
 
@@ -157,6 +280,7 @@ function renderStatus(): void {
     rotation: `Klicken setzt ein Drehzentrum der Ordnung ${order} (Tasten 2/3/4/6 wechseln)`,
     mirror: "Entlang der Spiegelachse ziehen",
     glide: "Entlang der Gleitachse ziehen – die Länge ist der Gleitvektor (meist ½ Gittertranslation)",
+    base: "Klicken oder ziehen setzt den Startpunkt p – abseits von Spiegeln und Drehzentren · [ ] ändern die Wortlänge",
   };
   let coords = "";
   if (pointer) {
@@ -322,6 +446,13 @@ canvas.addEventListener("pointerdown", (e) => {
       renderList();
       break;
     }
+    case "base": {
+      checkpoint();
+      scene.base = w;
+      drag = { type: "base" };
+      changed();
+      break;
+    }
     case "rotation": {
       checkpoint();
       selectedId = addElement(scene, { kind: "rotation", points: [snapped(s).point], order }).id;
@@ -346,13 +477,15 @@ canvas.addEventListener("pointermove", (e) => {
     moveHandle(drag.ref, drag.last);
   } else if (drag?.type === "create") {
     drag.to = snapped(s).point;
+  } else if (drag?.type === "base") {
+    scene.base = toWorld(view, s);
   }
   requestRender();
 });
 
 canvas.addEventListener("pointerup", () => {
   if (drag?.type === "create") finishCreate(drag);
-  if (drag?.type === "handle") changed();
+  if (drag?.type === "handle" || drag?.type === "base") changed();
   drag = null;
   requestRender();
 });
@@ -400,6 +533,10 @@ window.addEventListener("keydown", (e) => {
     selectedId = null;
     renderList();
   } else if (e.key === "f" || e.key === "F") fitView();
+  else if (e.key === "[" || e.key === "]") {
+    const c = currentConstruction();
+    if (c) setLengthLimit(lengthLimit + (e.key === "]" ? 1 : -1), c);
+  }
   else if (e.key === "+" || e.key === "=") view = zoomAt(view, { x: size.width / 2, y: size.height / 2 }, 1.25);
   else if (e.key === "-") view = zoomAt(view, { x: size.width / 2, y: size.height / 2 }, 0.8);
   else if (e.key === " ") {
@@ -442,6 +579,23 @@ stage.addEventListener("drop", (e) => {
 });
 $("#example").addEventListener("click", () => loadImage(import.meta.env.BASE_URL + "beispiel.svg"));
 $("#fit").addEventListener("click", fitView);
+$<HTMLInputElement>("#length").addEventListener("input", (e) => {
+  stopPlay();
+  const c = currentConstruction();
+  if (c) setLengthLimit(Number((e.target as HTMLInputElement).value), c);
+});
+$("#play").addEventListener("click", (e) => {
+  e.preventDefault(); // the button sits inside a <label>
+  togglePlay();
+});
+$<HTMLInputElement>("#show-copies").addEventListener("change", (e) => {
+  showCopies = (e.target as HTMLInputElement).checked;
+  requestRender();
+});
+$<HTMLInputElement>("#show-orbit").addEventListener("change", (e) => {
+  showOrbit = (e.target as HTMLInputElement).checked;
+  requestRender();
+});
 $("#clear").addEventListener("click", () => {
   if (scene.elements.length === 0) return;
   checkpoint();
@@ -464,7 +618,8 @@ $("#orders").append(
   ...ROTATION_ORDERS.map((n) => {
     const btn = document.createElement("button");
     btn.dataset.order = String(n);
-    btn.textContent = `${n}-zählig`;
+    btn.textContent = String(n);
+    btn.title = `${n}-zähliges Drehzentrum`;
     btn.addEventListener("click", () => setOrder(n));
     return btn;
   }),

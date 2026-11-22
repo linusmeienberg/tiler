@@ -50,6 +50,12 @@ button.active {
   color: white;
 }
 
+.caption {
+  align-self: center;
+  color: #78716c;
+  margin-right: 2px;
+}
+
 kbd {
   font-size: 11px;
   opacity: 0.6;
@@ -132,6 +138,50 @@ aside h2 {
 
 .empty {
   color: #a8a29e;
+}
+
+aside h2:not(:first-child) {
+  margin-top: 24px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+#play {
+  margin-left: auto;
+  padding: 2px 10px;
+}
+
+#length {
+  width: 100%;
+}
+
+#cover-info,
+#cover-hover {
+  color: #57534e;
+  margin: 8px 0;
+}
+
+#cover-hover {
+  min-height: 2.6em;
+}
+
+#cover-warnings {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+#cover-warnings li {
+  background: #fef2f2;
+  border-left: 4px solid #dc2626;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  border-radius: 4px;
 }
 
 footer {

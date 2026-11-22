@@ -8,7 +8,7 @@
   <body>
     <header class="toolbar">
       <div class="group" id="tools"></div>
-      <div class="group" id="orders" title="Ordnung des Drehzentrums (Tasten 2, 3, 4, 6)"></div>
+      <div class="group" id="orders" title="Ordnung des Drehzentrums (Tasten 2, 3, 4, 6)"><span class="caption">Ordnung</span></div>
       <div class="group">
         <label class="button">Bild laden<input type="file" id="file" accept="image/*" hidden /></label>
         <button id="example">Beispiel</button>
@@ -22,6 +22,21 @@
         <ul id="elements"></ul>
         <p class="empty" id="no-elements">Noch keine Elemente.</p>
         <button id="clear">Alle löschen</button>
+
+        <h2>Aufbau</h2>
+        <div id="cover-empty" class="empty">Werkzeug »Startpunkt« (P) wählen und einen Punkt p ins Bild setzen.</div>
+        <div id="cover">
+          <label class="row">
+            Wortlänge ≤ <b id="length-value">0</b>
+            <button id="play" title="Schrittweise aufbauen">▶</button>
+          </label>
+          <input type="range" id="length" min="0" max="0" value="0" />
+          <label class="row"><input type="checkbox" id="show-copies" checked /> Kopien des Bereichs</label>
+          <label class="row"><input type="checkbox" id="show-orbit" checked /> Bahn von p</label>
+          <p id="cover-info"></p>
+          <p id="cover-hover"></p>
+          <ul id="cover-warnings"></ul>
+        </div>
       </aside>
     </main>
     <footer id="status"></footer>

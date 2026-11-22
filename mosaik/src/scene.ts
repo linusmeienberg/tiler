@@ -25,6 +25,8 @@ export interface SceneElement {
 export interface Scene {
   elements: SceneElement[];
   nextId: number;
+  /** Start point p for orbit and Dirichlet domain. */
+  base?: Point | null;
 }
 
 export interface HandleRef {

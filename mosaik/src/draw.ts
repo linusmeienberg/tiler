@@ -1,4 +1,5 @@
-/** Rendering of image, lattice and symmetry elements onto the canvas. */
+/** Rendering of image, lattice, symmetry elements and the construction onto the canvas. */
+import type { Construction } from "./construction";
 import type { Point } from "./isometry";
 import { labels, latticeBasis, type RotationOrder, type Scene, type SceneElement } from "./scene";
 import { toScreen, toWorld, type View } from "./view";
@@ -9,6 +10,7 @@ export const COLORS = {
   mirror: "#2563eb",
   glide: "#059669",
   selected: "#f59e0b",
+  hover: "#db2777",
 };
 
 export interface Preview {
@@ -17,7 +19,19 @@ export interface Preview {
   to: Point;
 }
 
+/** What to show of the construction (orbit, Dirichlet domain and its copies). */
+export interface CoverState {
+  construction: Construction;
+  base: Point;
+  /** Show copies g(D) and orbit points g(p) with word length ≤ maxLength. */
+  maxLength: number;
+  showCopies: boolean;
+  showOrbit: boolean;
+  hovered: number | null; // element index
+}
+
 export interface DrawState {
+  cover: CoverState | null;
   view: View;
   width: number; // CSS pixels
   height: number;
@@ -52,6 +66,8 @@ export function draw(ctx: CanvasRenderingContext2D, st: DrawState): void {
     ctx.textAlign = "start";
   }
 
+  if (st.cover) drawCover(ctx, st, st.cover);
+
   const names = labels(st.scene);
   const sorted = [...st.scene.elements].sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind]);
   for (const el of sorted) {
@@ -75,6 +91,92 @@ export function draw(ctx: CanvasRenderingContext2D, st: DrawState): void {
     ctx.strokeStyle = "#111";
     ctx.lineWidth = 1.5;
     ctx.stroke();
+  }
+
+  if (st.cover) {
+    const b = toScreen(view, st.cover.base);
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, 5, 0, 2 * Math.PI);
+    ctx.fillStyle = "#111";
+    ctx.fill();
+    ctx.strokeStyle = "white";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    label(ctx, "p", b, "#111");
+  }
+}
+
+// Viridis-like sequential ramp: word length 0 (dark) → max (light).
+const RAMP = ["#440154", "#3b528b", "#21918c", "#5ec962", "#fde725"];
+
+export function lengthColor(length: number, maxLength: number): string {
+  const t = maxLength > 0 ? Math.min(length / maxLength, 1) : 0;
+  const x = t * (RAMP.length - 1);
+  const i = Math.min(Math.floor(x), RAMP.length - 2);
+  const mix = (a: string, b: string, f: number) => {
+    const ca = [1, 3, 5].map((k) => parseInt(a.slice(k, k + 2), 16));
+    const cb = [1, 3, 5].map((k) => parseInt(b.slice(k, k + 2), 16));
+    return `rgb(${ca.map((v, j) => Math.round(v + (cb[j] - v) * f)).join(",")})`;
+  };
+  return mix(RAMP[i], RAMP[i + 1], x - i);
+}
+
+function drawCover(ctx: CanvasRenderingContext2D, st: DrawState, cover: CoverState): void {
+  const { construction: c, maxLength } = cover;
+  const { view, width, height } = st;
+  const domainReach = Math.max(...c.domain.map((v) => Math.hypot(v.x - cover.base.x, v.y - cover.base.y))) * view.scale;
+  const visible = (s: Point) =>
+    s.x > -domainReach && s.x < width + domainReach && s.y > -domainReach && s.y < height + domainReach;
+  const polygon = (i: number) => {
+    const g = c.elements[i].g;
+    ctx.beginPath();
+    c.domain.forEach((v, k) => {
+      const w = g.a * v.x + g.b * v.y + g.tx;
+      const z = g.c * v.x + g.d * v.y + g.ty;
+      const s = toScreen(view, { x: w, y: z });
+      if (k === 0) ctx.moveTo(s.x, s.y);
+      else ctx.lineTo(s.x, s.y);
+    });
+    ctx.closePath();
+  };
+
+  if (cover.showCopies) {
+    ctx.save();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(255,255,255,0.75)";
+    c.elements.forEach((e, i) => {
+      if (e.length > maxLength || !visible(toScreen(view, c.orbit[i]))) return;
+      polygon(i);
+      ctx.globalAlpha = 0.38;
+      ctx.fillStyle = lengthColor(e.length, c.maxLength);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
+  // The domain itself, and the copy under the cursor.
+  haloStroke(ctx, () => polygon(0), "#111", 2.5);
+  if (cover.hovered !== null && cover.hovered > 0 && c.elements[cover.hovered].length <= maxLength) {
+    haloStroke(ctx, () => polygon(cover.hovered!), COLORS.hover, 2.5);
+  }
+
+  if (cover.showOrbit) {
+    ctx.save();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = "white";
+    ctx.fillStyle = "#111";
+    c.elements.forEach((e, i) => {
+      if (i === 0 || e.length > maxLength) return;
+      const s = toScreen(view, c.orbit[i]);
+      if (!visible(s)) return;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, 3, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.stroke();
+    });
+    ctx.restore();
   }
 }
 
