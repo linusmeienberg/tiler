@@ -1,7 +1,8 @@
 /** UI wiring: tools, pointer/keyboard input, image loading, element list. */
 import "./style.css";
 import { construct, nearestOrbitIndex, type Construction } from "./construction";
-import { COLORS, draw, type CoverState, type Preview } from "./draw";
+import { CLASS_COLORS, COLORS, draw, type CoverState, type Preview } from "./draw";
+import { inventory, type Inventory } from "./inventory";
 import type { Point } from "./isometry";
 import {
   addElement,
@@ -66,6 +67,7 @@ let lengthLimit = 0;
 let followMax = true; // keep lengthLimit at the maximum when the construction changes
 let showCopies = true;
 let showOrbit = true;
+let showDerived = true;
 let playTimer: number | null = null;
 
 type Drag =
@@ -132,7 +134,11 @@ function snapped(s: Point, exclude?: HandleRef): { point: Point; snappedTo: Poin
 
 // --- construction (orbit, Dirichlet domain, copies) ---------------------------------
 
-let cached: { key: string; construction: Construction | null } = { key: "", construction: null };
+let cached: { key: string; construction: Construction | null; inventory: Inventory | null } = {
+  key: "",
+  construction: null,
+  inventory: null,
+};
 
 /** Recomputed only when elements, start point or image change. */
 function currentConstruction(): Construction | null {
@@ -148,7 +154,7 @@ function currentConstruction(): Construction | null {
   if (key !== cached.key) {
     const construction = construct(generators, base, { radius });
     if (followMax || lengthLimit > construction.maxLength) lengthLimit = construction.maxLength;
-    cached = { key, construction };
+    cached = { key, construction, inventory: inventory(construction, base) };
   }
   return cached.construction;
 }
@@ -228,6 +234,62 @@ function renderCoverPanel(c: Construction | null, hovered: number | null): void 
   }
 }
 
+let shownInventory: Inventory | null | undefined;
+function renderInventoryPanel(inv: Inventory | null): void {
+  if (inv === shownInventory) return;
+  shownInventory = inv;
+  $("#inv").hidden = !inv;
+  $("#inv-empty").hidden = !!inv;
+  if (!inv) return;
+
+  $("#inv-conway").textContent = inv.symbol;
+  $("#inv-name").textContent = inv.name ? `(${inv.name})` : "";
+  const row = (cells: (string | Node)[], className = "") => {
+    const tr = document.createElement("tr");
+    tr.className = className;
+    for (const cell of cells) {
+      const td = document.createElement("td");
+      td.append(cell);
+      tr.append(td);
+    }
+    return tr;
+  };
+  $("#inv-table").replaceChildren(
+    ...inv.items.map((item) => {
+      const feature = document.createElement("span");
+      if (item.classIndex !== undefined) {
+        const swatch = document.createElement("span");
+        swatch.className = "swatch";
+        swatch.style.background = CLASS_COLORS[item.classIndex % CLASS_COLORS.length];
+        feature.append(swatch);
+      }
+      feature.append(item.feature);
+      return row([feature, item.label, fraction(item.cost)]);
+    }),
+    row(["", "Summe", `${fraction(inv.total)} ${Math.abs(inv.total - 2) < 1e-9 ? "✓" : "✗"}`], "sum"),
+  );
+  $("#inv-check").textContent =
+    inv.expectedCopies !== null && inv.problems.length === 0
+      ? `Flächenprobe: ${inv.expectedCopies} Bereiche pro primitiver Zelle – passt zu ${inv.symbol} ✓`
+      : "";
+  $("#inv-problems").replaceChildren(
+    ...inv.problems.map((text) => {
+      const li = document.createElement("li");
+      li.textContent = text;
+      return li;
+    }),
+  );
+}
+
+/** 3/8 instead of 0.375 (denominators up to 24). */
+function fraction(x: number): string {
+  for (let den = 1; den <= 24; den++) {
+    const num = Math.round(x * den);
+    if (Math.abs(num / den - x) < 1e-9) return den === 1 ? String(num) : `${num}/${den}`;
+  }
+  return x.toFixed(3);
+}
+
 function formatNumber(x: number): string {
   return Math.abs(x - Math.round(x)) < 1e-6 ? String(Math.round(x)) : x.toFixed(2);
 }
@@ -265,11 +327,21 @@ function render(): void {
   let hovered: number | null = null;
   if (construction && scene.base) {
     hovered = pointer ? nearestOrbitIndex(construction.orbit, toWorld(view, pointer)) : null;
-    cover = { construction, base: scene.base, maxLength: lengthLimit, showCopies, showOrbit, hovered };
+    cover = {
+      construction,
+      inventory: cached.inventory,
+      showDerived,
+      base: scene.base,
+      maxLength: lengthLimit,
+      showCopies,
+      showOrbit,
+      hovered,
+    };
   }
 
   draw(ctx, { view, ...size, image, scene, selectedId, preview, ghost, snapIndicator, cover });
   renderCoverPanel(construction, hovered);
+  renderInventoryPanel(construction ? cached.inventory : null);
   renderStatus();
 }
 
@@ -388,6 +460,27 @@ function finishCreate(d: Extract<Drag, { type: "create" }>): void {
   changed();
 }
 
+/**
+ * Mirror and glide axes: turn the direction from → to onto a multiple of 15°
+ * relative to a reference (a₁, else the first other axis, else the image x axis),
+ * keeping the length along the axis. Hand-drawn axes are never exactly at 45° or
+ * 60° to each other, and slightly-off mirrors generate a non-discrete group.
+ */
+function constrainAxis(from: Point, to: Point, excludeId?: number): Point {
+  if (altDown) return to;
+  const lat = findLattice(scene);
+  const axis = scene.elements.find((e) => (e.kind === "mirror" || e.kind === "glide") && e.id !== excludeId);
+  const refEl = lat ?? axis;
+  const ref = refEl ? Math.atan2(refEl.points[1].y - refEl.points[0].y, refEl.points[1].x - refEl.points[0].x) : 0;
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const step = Math.PI / 12;
+  const angle = ref + Math.round((Math.atan2(dy, dx) - ref) / step) * step;
+  const u = { x: Math.cos(angle), y: Math.sin(angle) };
+  const along = dx * u.x + dy * u.y;
+  return { x: from.x + along * u.x, y: from.y + along * u.y };
+}
+
 function moveHandle(ref: HandleRef, to: Point): void {
   const el = scene.elements.find((e) => e.id === ref.id);
   if (!el) return;
@@ -474,9 +567,14 @@ canvas.addEventListener("pointermove", (e) => {
     view = { ...drag.startView, ox: drag.startView.ox + s.x - drag.start.x, oy: drag.startView.oy + s.y - drag.start.y };
   } else if (drag?.type === "handle") {
     drag.last = snapped(s, drag.ref).point;
+    const ref = drag.ref;
+    const el = scene.elements.find((e) => e.id === ref.id);
+    if (el && (el.kind === "mirror" || el.kind === "glide")) {
+      drag.last = constrainAxis(el.points[1 - ref.index], drag.last, el.id);
+    }
     moveHandle(drag.ref, drag.last);
   } else if (drag?.type === "create") {
-    drag.to = snapped(s).point;
+    drag.to = drag.kind === "lattice" ? snapped(s).point : constrainAxis(drag.from, snapped(s).point);
   } else if (drag?.type === "base") {
     scene.base = toWorld(view, s);
   }
@@ -515,7 +613,8 @@ canvas.addEventListener(
 );
 
 window.addEventListener("keydown", (e) => {
-  if (e.target instanceof HTMLInputElement) return;
+  // Shortcuts work everywhere except in text fields (checkboxes and sliders keep focus after a click).
+  if (e.target instanceof HTMLInputElement && !["checkbox", "range"].includes(e.target.type)) return;
   if (e.key === "Alt") altDown = true;
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
     e.preventDefault();
@@ -590,6 +689,10 @@ $("#play").addEventListener("click", (e) => {
 });
 $<HTMLInputElement>("#show-copies").addEventListener("change", (e) => {
   showCopies = (e.target as HTMLInputElement).checked;
+  requestRender();
+});
+$<HTMLInputElement>("#show-derived").addEventListener("change", (e) => {
+  showDerived = (e.target as HTMLInputElement).checked;
   requestRender();
 });
 $<HTMLInputElement>("#show-orbit").addEventListener("change", (e) => {

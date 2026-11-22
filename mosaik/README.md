@@ -42,6 +42,23 @@ Schritt 3 – Aufbau aus dem Fundamentalbereich:
   nach Wortlänge eingefärbt. Unter dem Zeiger: die Kopie g(D) und das Wort für g
   (gefunden als nächster Bahnpunkt – das ist genau die Dirichlet-Eigenschaft).
 
+Schritt 4 – Inventur und Conway-Notation:
+
+- `src/inventory.ts` – Drehzentren nahe p, in Bahnklassen zusammengefasst
+  (Union-Find über die Gruppenelemente); Ordnung = Ordnung der Drehgruppe am
+  Zentrum; Spiegelecke, wenn Spiegel hindurchgehen, sonst Kegelspitze. Spiegel:
+  ein Rand, wenn sie in mehreren Richtungen laufen, sonst eine Klasse paralleler
+  Spiegel pro Rand. x, wenn eine Gleitspiegelung p's spiegelfreie Kammer auf sich
+  abbildet; die Anzahl folgt aus der Preisprobe. Unabhängige Kontrolle: Bereiche
+  pro primitiver Zelle (aus Flächen) = Punktgruppenordnung des Symbols.
+- Anzeige: Symbol + Name, Preistabelle mit Summe, Flächenprobe; auf dem Bild alle
+  Spiegel, Gleitachsen und Drehzentren der Gruppe, Zentren nach Klasse gefärbt.
+- Spiegel- und Gleitachsen rasten in der Richtung auf Vielfache von 15° ein
+  (relativ zu a₁ bzw. zur ersten Achse) – sonst erzeugen leicht schiefe Spiegel
+  eine nicht-diskrete Gruppe.
+- Getestet für alle 17 Gruppen. Hinweis: `tiler/groups.py` hat p3m1 und p31m
+  vertauscht (siehe `tests/inventory.test.ts`).
+
 ## Entwicklung
 
 ```bash

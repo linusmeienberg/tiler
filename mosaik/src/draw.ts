@@ -1,5 +1,6 @@
 /** Rendering of image, lattice, symmetry elements and the construction onto the canvas. */
 import type { Construction } from "./construction";
+import type { Inventory } from "./inventory";
 import type { Point } from "./isometry";
 import { labels, latticeBasis, type RotationOrder, type Scene, type SceneElement } from "./scene";
 import { toScreen, toWorld, type View } from "./view";
@@ -20,8 +21,13 @@ export interface Preview {
 }
 
 /** What to show of the construction (orbit, Dirichlet domain and its copies). */
+/** Colors of the rotation-center orbit classes (inventory rows and canvas rings). */
+export const CLASS_COLORS = ["#0891b2", "#c026d3", "#65a30d", "#ea580c", "#4f46e5", "#0d9488"];
+
 export interface CoverState {
   construction: Construction;
+  inventory: Inventory | null;
+  showDerived: boolean;
   base: Point;
   /** Show copies g(D) and orbit points g(p) with word length ≤ maxLength. */
   maxLength: number;
@@ -67,6 +73,7 @@ export function draw(ctx: CanvasRenderingContext2D, st: DrawState): void {
   }
 
   if (st.cover) drawCover(ctx, st, st.cover);
+  if (st.cover?.inventory && st.cover.showDerived) drawDerived(ctx, st, st.cover.inventory);
 
   const names = labels(st.scene);
   const sorted = [...st.scene.elements].sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind]);
@@ -272,6 +279,36 @@ function drawLattice(ctx: CanvasRenderingContext2D, st: DrawState, el: SceneElem
   ctx.restore();
 }
 
+/** All mirrors, glide axes and rotation centers of the generated group (thin, under the drawn ones). */
+function drawDerived(ctx: CanvasRenderingContext2D, st: DrawState, inv: Inventory): void {
+  const { view } = st;
+  const line = (a: Point, u: Point) => {
+    const s = toScreen(view, a);
+    infiniteLine(ctx, s, { x: s.x + u.x, y: s.y + u.y }, st);
+  };
+  ctx.save();
+  ctx.globalAlpha = 0.85;
+  for (const g of inv.glides) haloStroke(ctx, () => line(g.a, g.u), COLORS.glide, 1.2, [6, 5]);
+  for (const m of inv.mirrors) haloStroke(ctx, () => line(m.a, m.u), COLORS.mirror, 1.2);
+  ctx.restore();
+
+  const pad = 20;
+  for (const z of inv.centers) {
+    const s = toScreen(view, z.point);
+    if (s.x < -pad || s.y < -pad || s.x > st.width + pad || s.y > st.height + pad) continue;
+    const color = CLASS_COLORS[z.classIndex % CLASS_COLORS.length];
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, 12, 0, 2 * Math.PI);
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = "white";
+    ctx.stroke();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = color;
+    ctx.stroke();
+    glyph(ctx, s, z.order as RotationOrder, color, 0.7);
+  }
+}
+
 // --- primitives (all in screen coordinates) -------------------------------------------
 
 function haloStroke(
@@ -329,12 +366,12 @@ function arrow(ctx: CanvasRenderingContext2D, a: Point, b: Point, color: string,
 }
 
 /** Standard crystallographic symbols: lens (2), triangle (3), square (4), hexagon (6). */
-function glyph(ctx: CanvasRenderingContext2D, c: Point, order: RotationOrder, color: string): void {
+function glyph(ctx: CanvasRenderingContext2D, c: Point, order: RotationOrder, color: string, size = 1): void {
   ctx.beginPath();
   if (order === 2) {
-    ctx.ellipse(c.x, c.y, 5, 9, 0, 0, 2 * Math.PI);
+    ctx.ellipse(c.x, c.y, 5 * size, 9 * size, 0, 0, 2 * Math.PI);
   } else {
-    const radius = { 3: 10, 4: 9, 6: 9 }[order];
+    const radius = { 3: 10, 4: 9, 6: 9 }[order] * size;
     const offset = order === 4 ? Math.PI / 4 : -Math.PI / 2;
     for (let k = 0; k < order; k++) {
       const angle = offset + (2 * Math.PI * k) / order;
