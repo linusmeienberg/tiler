@@ -97,6 +97,12 @@ main {
   outline-offset: -3px;
 }
 
+.orb-label {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 8px 0;
+}
+
 canvas {
   position: absolute;
   inset: 0;

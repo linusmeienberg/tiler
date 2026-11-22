@@ -8,14 +8,14 @@
   <body>
     <header class="toolbar">
       <div class="segmented mode" id="mode">
-        <button data-mode="analyse" title="Bild laden, Symmetrieelemente einzeichnen, Gruppe prüfen">Analyse</button><button data-mode="generate" title="Gruppe wählen, Motiv in den Fundamentalbereich legen, Ebene pflastern">Generierung</button>
+        <button data-mode="analyse" title="Bild laden, Symmetrieelemente einzeichnen, Gruppe prüfen">Analyse</button><button data-mode="orbifold" title="Den Orbifold des Musters in 3D ansehen">Orbifold</button><button data-mode="generate" title="Gruppe wählen, Motiv in den Fundamentalbereich legen, Ebene pflastern">Generierung</button>
       </div>
       <div class="toolbar-mode" id="toolbar-analyse">
         <div class="group" id="tools"></div>
         <div class="group" id="orders" title="Ordnung des Drehzentrums (Tasten 2, 3, 4, 6)"><span class="caption">Ordnung</span></div>
       </div>
       <div class="group">
-        <label class="button">Bild laden<input type="file" id="file" accept="image/*" hidden /></label>
+        <label class="button" id="file-button">Bild laden<input type="file" id="file" accept="image/*" hidden /></label>
         <button id="example">Beispiel</button>
         <button id="fit" title="Ansicht einpassen (F)">Einpassen</button>
       </div>
@@ -23,6 +23,29 @@
     <main>
       <div id="stage"><canvas id="canvas"></canvas></div>
       <aside>
+        <div id="side-orbifold">
+          <h2>Muster</h2>
+          <div class="segmented" id="orb-source">
+            <button data-source="analyse">aus der Analyse</button><button data-source="generate">aus der Generierung</button>
+          </div>
+          <p id="orb-empty" class="empty">
+            Noch kein Muster mit Gitter: in der Analyse ein Bild laden, Symmetrieelemente einzeichnen und p setzen –
+            oder in der Generierung ein Motiv laden.
+          </p>
+          <div id="orb-torus">
+            <p id="orb-label" class="orb-label"></p>
+            <h2>Torus</h2>
+            <p class="info">
+              Der Torus ist die Ebene, in der Punkte gleich gelten, die sich um eine Gitterverschiebung unterscheiden:
+              eine Gitterzelle, rechts hinaus = links herein, oben hinaus = unten herein. Flach ist er im Raum nicht
+              baubar – der Donut dehnt die Textur außen und staucht sie innen.
+            </p>
+            <label class="slider">Verschiebung entlang der Röhre <span id="orb-shift-value"></span><input type="range" id="orb-shift" min="0" max="1" step="0.002" value="0" /></label>
+            <label class="row"><input type="checkbox" id="orb-swap" /> t₁ und t₂ tauschen (welche Richtung um die Röhre läuft)</label>
+            <p id="orb-info" class="info"></p>
+          </div>
+        </div>
+
         <div id="side-generate">
           <h2>Gruppe</h2>
           <select id="gen-group"></select>

@@ -27,8 +27,23 @@ import {
 } from "./scene";
 import { fitRect, toWorld, zoomAt, type View } from "./view";
 import * as gen from "./generate";
+import { cellSize, renderCell } from "./cell";
+import type { PatternSource, TorusSettings } from "./orbifold3d";
 
-type Mode = "analyse" | "generate";
+// The 3D view (three.js) is loaded only when the orbifold mode is first opened.
+type Orb = typeof import("./orbifold3d");
+let orb: Orb | null = null;
+let orbLoading: Promise<Orb> | null = null;
+function loadOrb(): Promise<Orb> {
+  orbLoading ??= import("./orbifold3d").then((m) => {
+    m.init(stage);
+    orb = m;
+    return m;
+  });
+  return orbLoading;
+}
+
+type Mode = "analyse" | "orbifold" | "generate";
 const MODE_KEY = "tiler.mode";
 
 type Tool = "select" | "lattice" | "rotation" | "mirror" | "glide" | "base";
@@ -66,7 +81,10 @@ let image: HTMLImageElement | null = null;
 let imageSvg: string | null = null; // SVG source of the analysis image, if it is one
 let mode: Mode = loadMode();
 let view: View = { scale: 1, ox: 0, oy: 0 };
-const views: Record<Mode, View | null> = { analyse: null, generate: null };
+const views: Record<Mode, View | null> = { analyse: null, orbifold: null, generate: null };
+/** Orbifold mode: which pattern it shows, and the torus settings. */
+let orbSource: "analyse" | "generate" = "analyse";
+const torus: TorusSettings = { swap: false, shift: 0 };
 let size = { width: 0, height: 0, dpr: 1 };
 let pointer: Point | null = null; // screen coordinates
 let spaceDown = false;
@@ -448,6 +466,69 @@ function formatNumber(x: number): string {
   return Math.abs(x - Math.round(x)) < 1e-6 ? String(Math.round(x)) : x.toFixed(2);
 }
 
+// --- orbifold view ------------------------------------------------------------------
+
+/** One lattice cell of the analysed image, rebuilt from the shown domain D (null if not available). */
+function analysisSource(): PatternSource | null {
+  const a = analysis();
+  const c = a.auxiliary ? null : a.construction;
+  const domain = currentDomain();
+  const img = image;
+  const base = scene.base;
+  if (!c?.translations || c.copiesPerCell === null || !img || !base || !domain) return null;
+  const inv = a.inventory;
+  return {
+    key: a.key + img.src + domainMode,
+    label: inv ? `${inv.symbol}${inv.name ? ` (${inv.name})` : ""}` : "eingezeichnete Gruppe",
+    t1: c.translations.t1,
+    t2: c.translations.t2,
+    render: (av, bv) =>
+      renderCell({
+        a: av,
+        b: bv,
+        origin: { x: base.x - (av.x + bv.x) / 2, y: base.y - (av.y + bv.y) / 2 },
+        ...cellSize(av, bv),
+        domain: domain.polygon,
+        copies: c.elements.map((e) => e.g),
+        paint: (ctx) => ctx.drawImage(img, 0, 0),
+      }),
+  };
+}
+
+function renderOrbifold(): void {
+  const sources = { analyse: analysisSource(), generate: gen.patternSource() };
+  for (const btn of document.querySelectorAll<HTMLButtonElement>("#orb-source button")) {
+    const s = btn.dataset.source as "analyse" | "generate";
+    btn.classList.toggle("active", s === orbSource);
+    btn.disabled = !sources[s];
+  }
+  const source = sources[orbSource];
+  $("#orb-empty").hidden = !!source;
+  $("#orb-torus").hidden = !source;
+  if (!orb) {
+    $("#orb-info").textContent = "3D-Ansicht wird geladen …";
+    return;
+  }
+  const info = orb.update(source, torus);
+  $("#orb-shift-value").textContent = `${Math.round(torus.shift * 360)}°`;
+  if (source && info) {
+    const px = (x: number) => `${Math.round(x)} px`;
+    $("#orb-label").textContent = source.label;
+    const f = (x: number) => `×${x.toFixed(2).replace(".", ",")}`;
+    $("#orb-info").textContent =
+      `Um den großen Kreis läuft ${torus.swap ? "t₂" : "t₁"} (${px(info.bigCircle)}), um die Röhre ${torus.swap ? "t₁" : "t₂"} (${px(info.tube)}). ` +
+      `Verzerrung: Rund um das Loch ist die Textur außen ${f(info.stretch)} gedehnt, innen auf ${f(info.squeeze)} gestaucht, ` +
+      `in der Mitte der Röhre maßstabsgetreu.` +
+      (info.tubeFactor < 0.999
+        ? ` Entlang der Röhre ist sie auf ${f(info.tubeFactor)} gestaucht – mit ihrer wahren Länge wäre die Röhre so dick, dass der Torus kein Loch mehr hätte.`
+        : " Entlang der Röhre ist sie maßstabsgetreu.") +
+      (Math.abs(info.angle - 90) > 0.5
+        ? ` Außerdem ist sie geschert: t₁ und t₂ stehen im Muster im Winkel ${Math.round(info.angle)}° zueinander, auf dem Torus rechtwinklig.`
+        : "");
+  }
+  status.textContent = "Ziehen dreht den Torus · Scrollen zoomt · rechte Maustaste verschiebt · F: Ansicht zurücksetzen";
+}
+
 // --- rendering ------------------------------------------------------------------
 
 let renderQueued = false;
@@ -461,6 +542,10 @@ function requestRender(): void {
 }
 
 function render(): void {
+  if (mode === "orbifold") {
+    renderOrbifold();
+    return;
+  }
   if (mode === "generate") {
     gen.draw(ctx, view, size.width, size.height, size.dpr);
     gen.renderPanel();
@@ -677,7 +762,8 @@ function moveHandle(ref: HandleRef, to: Point): void {
 }
 
 function fitView(): void {
-  if (mode === "generate") view = gen.fitView(size.width, size.height);
+  if (mode === "orbifold") orb?.resetCamera();
+  else if (mode === "generate") view = gen.fitView(size.width, size.height);
   else if (image) view = fitRect(image.naturalWidth, image.naturalHeight, size.width, size.height);
   requestRender();
 }
@@ -824,6 +910,10 @@ window.addEventListener("keydown", (e) => {
   }
   if (e.metaKey || e.ctrlKey) return;
 
+  if (mode === "orbifold") {
+    if (e.key === "f" || e.key === "F") fitView();
+    return;
+  }
   if (mode === "generate") {
     if (e.key === "f" || e.key === "F") fitView();
     else if (e.key === "+" || e.key === "=") view = zoomAt(view, { x: size.width / 2, y: size.height / 2 }, 1.25);
@@ -988,7 +1078,8 @@ new ResizeObserver(() => {
 // Modes.
 function loadMode(): Mode {
   try {
-    return localStorage.getItem(MODE_KEY) === "generate" ? "generate" : "analyse";
+    const m = localStorage.getItem(MODE_KEY);
+    return m === "generate" || m === "orbifold" ? m : "analyse";
   } catch {
     return "analyse";
   }
@@ -996,6 +1087,7 @@ function loadMode(): Mode {
 
 function setMode(m: Mode): void {
   if (size.width > 0) views[mode] = view;
+  if (m === "orbifold" && mode !== "orbifold") orbSource = mode;
   mode = m;
   try {
     localStorage.setItem(MODE_KEY, m);
@@ -1010,6 +1102,17 @@ function setMode(m: Mode): void {
   $("#toolbar-analyse").hidden = m !== "analyse";
   $("#side-analyse").hidden = m !== "analyse";
   $("#side-generate").hidden = m !== "generate";
+  $("#side-orbifold").hidden = m !== "orbifold";
+  $("#file-button").hidden = m === "orbifold";
+  $("#example").hidden = m === "orbifold";
+  canvas.hidden = m === "orbifold";
+  orb?.setActive(m === "orbifold");
+  if (m === "orbifold" && !orb) {
+    void loadOrb().then((o) => {
+      o.setActive(mode === "orbifold");
+      requestRender();
+    });
+  }
   canvas.style.cursor = m === "generate" ? "move" : tool === "select" ? "default" : "crosshair";
   const saved = views[m];
   if (saved) view = saved;
@@ -1020,6 +1123,20 @@ for (const btn of document.querySelectorAll<HTMLButtonElement>("#mode button")) 
   btn.addEventListener("click", () => setMode(btn.dataset.mode as Mode));
 }
 gen.setupPanel(requestRender);
+for (const btn of document.querySelectorAll<HTMLButtonElement>("#orb-source button")) {
+  btn.addEventListener("click", () => {
+    orbSource = btn.dataset.source as "analyse" | "generate";
+    requestRender();
+  });
+}
+$<HTMLInputElement>("#orb-shift").addEventListener("input", (e) => {
+  torus.shift = Number((e.target as HTMLInputElement).value);
+  requestRender();
+});
+$<HTMLInputElement>("#orb-swap").addEventListener("change", (e) => {
+  torus.swap = (e.target as HTMLInputElement).checked;
+  requestRender();
+});
 
 renderToolbar();
 renderList();

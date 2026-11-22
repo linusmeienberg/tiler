@@ -5,7 +5,9 @@
  * State and drawing live here; main.ts routes input and owns the shared canvas,
  * view and image loading.
  */
+import { renderCell, cellSize } from "./cell";
 import { CLASS_COLORS, drawOrbifold, haloStroke, label } from "./draw";
+import type { PatternSource } from "./orbifold3d";
 import { DEFAULT_PARAMS, findGroup, GROUPS, realize, type LatticeParams, type Realization } from "./groups";
 import { apply, inverse, type Isometry, type Point } from "./isometry";
 import { buildTiling, copyAt, toFractional, visibleCopies, type DomainMode, type Tiling } from "./tiling";
@@ -513,4 +515,42 @@ export function tilingSvg(t: Tiling, view: View, width: number, height: number):
     ...uses,
     `</svg>`,
   ].join("\n");
+}
+
+// --- for the orbifold view ------------------------------------------------------------
+
+/** One lattice cell of the current tiling, for the 3D view (null without motif). */
+export function patternSource(): PatternSource | null {
+  const t = tiling();
+  const m = settings.motif;
+  const img = motifImage;
+  if (!t || !m || !img) return null;
+  const { t1, t2 } = t.translations;
+  const label = settings.custom?.label ?? `${findGroup(settings.group).conway} (${findGroup(settings.group).iuc})`;
+  return {
+    key: JSON.stringify([cache.key, m, img.width, img.height, settings.domainMode]),
+    label,
+    t1,
+    t2,
+    render(a, b) {
+      const origin = { x: t.base.x - (a.x + b.x) / 2, y: t.base.y - (a.y + b.y) / 2 };
+      const xs = [0, 1].flatMap((u) => [0, 1].map((v) => origin.x + u * a.x + v * b.x));
+      const ys = [0, 1].flatMap((u) => [0, 1].map((v) => origin.y + u * a.y + v * b.y));
+      const copies = visibleCopies(t, { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) }, 20000) ?? [];
+      return renderCell({
+        a,
+        b,
+        origin,
+        ...cellSize(a, b),
+        domain: t.domain,
+        copies,
+        paint: (ctx) => {
+          ctx.translate(m.x, m.y);
+          ctx.rotate((m.rotationDeg * Math.PI) / 180);
+          ctx.scale(m.scale, m.scale);
+          ctx.drawImage(img, -img.width / 2, -img.height / 2);
+        },
+      });
+    },
+  };
 }

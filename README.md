@@ -69,6 +69,22 @@ npm run dev       # http://localhost:5173
 8. **In Generierung übernehmen:** Die erkannte Gruppe, p und das Bild wandern in
    den Generierungsmodus.
 
+## Orbifold (3D)
+
+Der mittlere Modus zeigt das Muster aus der Analyse oder aus der Generierung in
+3D, mit three.js. Erste Stufe ist der **Torus** ℝ²/Λ: Die Ebene wird aufgefasst,
+als wären Punkte, die sich um eine Gitterverschiebung unterscheiden, derselbe
+Punkt. Als Textur dient eine Gitterzelle, aufgebaut aus Kopien von D und darum
+nahtlos (`src/cell.ts`, `src/orbifold3d.ts`).
+
+- **Verzerrung:** Ein flacher Torus lässt sich im Raum nicht unverzerrt bauen.
+  Darum dehnt der Donut die Textur außen und staucht sie innen; der mittlere
+  Ring der Röhre ist maßstabsgetreu. Ist die Röhre zu dick, wird sie verkürzt,
+  und schiefe Gitter werden geschert. Die Ansicht gibt alle Faktoren an.
+- **Regler:** Er verschiebt die Textur entlang der Röhre, also die willkürliche
+  Wahl, welcher Streifen außen liegt.
+- **Schalter:** Er tauscht, welcher Gittervektor um die Röhre läuft.
+
 ## Generierung
 
 - **Gruppe wählen.** Je nach Gittertyp stellt man Zellgröße, Seitenverhältnis

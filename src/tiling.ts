@@ -16,6 +16,8 @@ export interface Tiling {
   realization: Realization;
   base: Point; // p, in world coordinates
   domain: Point[];
+  /** Primitive translation basis (for centered lattices smaller than the conventional a₁, a₂). */
+  translations: { t1: Point; t2: Point };
   /** Set when the canonical domain is used: edge roles and singular points for drawing. */
   orbifold: OrbifoldDomain | null;
   /** Why the orbifold was not available (the Voronoi cell is used instead). */
@@ -54,7 +56,7 @@ export function buildTiling(realization: Realization, baseFrac: Point, mode: Dom
   }
   const centroid = polygonCentroid(domain);
   const reach = Math.max(...domain.map((v) => Math.hypot(v.x - centroid.x, v.y - centroid.y)));
-  return { realization, base, domain, orbifold, orbifoldError, centroid, reach };
+  return { realization, base, domain, translations: c.translations!, orbifold, orbifoldError, centroid, reach };
 }
 
 /**
