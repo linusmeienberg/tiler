@@ -1,99 +1,137 @@
-# tiler
+# mosaik
 
-Load a PNG or SVG image, position it inside the true fundamental domain of a chosen
-wallpaper group, and watch it tile the plane — interactively, in Jupyter.
+Ein Browser-Werkzeug für Symmetrien ebener Ornamente, mit zwei Arbeitsmodi:
 
-## Install
+- **Analyse:** das Foto eines periodischen Mosaiks laden und Symmetrieelemente
+  einzeichnen. Das Werkzeug prüft, ob sie zusammenpassen, bestimmt die
+  Symmetriegruppe in Conway-Notation und baut das Bild aus dem
+  Fundamentalbereich wieder auf, um es mit dem Original zu vergleichen.
+- **Generierung:** eine der 17 Ornamentgruppen wählen, ein Bild als Motiv in den
+  Fundamentalbereich legen und die Ebene damit pflastern. Das Ergebnis lässt
+  sich als SVG oder PNG exportieren.
 
-With [uv](https://docs.astral.sh/uv/) (recommended — this repo has a `uv.lock`):
+![Analyse: drei Spiegelachsen erzeugen *442 (p4m)](docs/analyse.jpg)
 
-```bash
-uv sync --extra dev
-```
+![Generierung: Motiv unter der Gruppe 632 (p6)](docs/generierung.jpg)
 
-Or with plain pip:
+Es läuft komplett im Browser: kein Server, keine Daten verlassen den Rechner.
 
-```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
-```
+## Schnellstart
 
-## Use it
-
-Launch Jupyter and open `examples/demo.ipynb`, or start from a blank notebook:
+Gebraucht wird [Node.js](https://nodejs.org) (Version in `.nvmrc`).
 
 ```bash
-uv run jupyter lab   # or: jupyter lab, if using the pip/venv install
+npm install
+npm run dev       # http://localhost:5173
 ```
 
-```python
-from tiler import TilerWidget
+## Analyse
 
-TilerWidget(group="p4m")
-```
+1. **Bild laden** (Knopf oder hineinziehen). »Beispiel« lädt ein \*442-Testmuster.
+2. **Symmetrieelemente einzeichnen:**
 
-Pick a wallpaper group and lattice parameters, then **Load image** to upload a PNG
-or SVG. The blue outline in the left canvas is the group's true fundamental domain
-(a Dirichlet/Voronoi cell — not just the unit cell); drag inside it to reposition the
-image, and use the scale/rotate sliders to fit it. The right canvas live-updates
-with the derived covering: every copy is the same image, clipped to the fundamental
-domain polygon and placed by one of the group's symmetry operations, so edges tile
-seamlessly. Freehand sketching (no image needed) still works too, via the "Draw"
-mouse mode.
+   | Werkzeug | Taste |
+   |---|---|
+   | Gitter | T |
+   | Drehzentrum (Ordnung mit 2/3/4/6) | D |
+   | Spiegelachse | S |
+   | Gleitachse (die Länge ist der Gleitvektor) | G |
 
-## As a library
+   Punkte rasten an Gitterpunkte und vorhandene Elemente ein, Achsen an
+   15°-Richtungen. Alt schaltet das Einrasten ab.
+3. **Verträglichkeit:** Passen die Elemente nicht zusammen (z. B. ein
+   quadratisches Gitter mit einem 3-zähligen Zentrum), erscheint sofort eine
+   Warnung.
+4. **Inventur:** Conway-Symbol und internationaler Name, dazu die Preisprobe
+   (Summe der Kosten = 2) und eine unabhängige Flächenprobe. Auf Wunsch zeigt die
+   Ansicht alle Spiegel, Gleitachsen und Drehzentren der Gruppe, die Zentren nach
+   Bahnklasse eingefärbt.
+5. **Startpunkt p** (Taste P):
+   - zeigt den Fundamentalbereich D (Dirichlet-Bereich von p) und seine Kopien;
+   - der Regler baut die Kopien schrittweise nach Wortlänge in den Erzeugern auf;
+   - unter dem Zeiger steht das Gruppenelement, das D in diese Kopie abbildet.
+6. **Prüfung am Bild:**
+   - »Aus D« setzt das Bild nur aus dem Inhalt von D zusammen.
+   - »Differenz« zeigt, wo das vom Original abweicht.
+   - Als Vergleichsmaßstab dient das Bild, gegen sich selbst verschoben.
+7. **In Generierung übernehmen:** Die erkannte Gruppe, p und das Bild wandern in
+   den Generierungsmodus.
 
-```python
-import numpy as np
-from tiler import FundamentalDomain, generate_covering, svg_from_paths
+## Generierung
 
-domain = FundamentalDomain(group="p6m", cell_size=1.0)
-domain.add_path(np.array([[0.1, 0.0], [0.3, 0.2], [0.15, 0.35]]))  # a vector motif
+- **Gruppe wählen.** Je nach Gittertyp stellt man Zellgröße, Seitenverhältnis
+  und Winkel ein.
+- **Motiv:** »Bild laden« oder »Beispiel«.
+  - Ziehen verschiebt das Motiv. Auch in gespiegelten oder gedrehten Kopien
+    folgt es dem Zeiger.
+  - Größe und Drehung stellt man mit Reglern ein.
+- **Form von D:** Den Punkt p ziehen ändert sie.
+- **Export des sichtbaren Ausschnitts:**
+  - Ist das Motiv ein SVG, entsteht ein SVG. Das Motiv steht darin einmal in
+    `<defs>`, jede Kopie ist ein `<use>` mit Transformation und Clip auf D.
+  - Sonst entsteht ein PNG in doppelter Auflösung.
 
-covering = generate_covering(domain, viewport_min=(-3, -3), viewport_max=(3, 3))
-svg = svg_from_paths(covering, viewport_min=(-3, -3), viewport_max=(3, 3))
-```
+Verschieben: Leertaste oder rechte Maustaste und ziehen, oder scrollen.
+Zoomen: ⌘/Strg und scrollen. »Einpassen«: Taste F.
 
-```python
-domain = FundamentalDomain(group="p4g", cell_size=1.0)
-domain.set_image(open("photo.png", "rb").read(), "photo.png")  # centers + auto-scales
-domain.image.rotation_deg = 15.0
-# tiler.render.covering_transforms() gives the (translation, Affine2D) pairs used
-# by the widget to clip+place each copy on an HTML canvas; generate_covering() is
-# for vector paths (domain.paths), not for compositing raster/SVG images.
-```
+## Wie es funktioniert
 
-## Layout
+- **Isometrien** sind affine Abbildungen p ↦ M·p + t (`src/isometry.ts`).
+- **Gruppe aus Erzeugern** (`src/group.ts`):
+  - Breitensuche über Wörter in den Erzeugern und ihren Inversen, mit Wortlänge.
+  - Doppelte Elemente werden über einen räumlichen Hash erkannt.
+  - Die Suche endet, wenn ein Element das Zentrum weiter als einen Radius
+    verschiebt.
+- **Fundamentalbereich** (`src/construction.ts`):
+  - Er ist die Voronoi-Zelle von p in seiner Bahn, berechnet durch
+    Halbebenen-Schnitt.
+  - Die Kopie unter einem Punkt ist die mit dem nächsten Bahnpunkt.
+- **Inventur** (`src/inventory.ts`):
+  - Drehzentren werden per Union-Find in Bahnklassen zusammengefasst. Gehen
+    Spiegel durch ein Zentrum, ist es eine Spiegelecke, sonst eine Kegelspitze.
+  - Spiegel ergeben einen Rand, wenn sie sich schneiden, sonst einen pro Klasse
+    paralleler Spiegel.
+  - Ein x gibt es, wenn eine Gleitspiegelung die spiegelfreie Kammer von p auf
+    sich abbildet. Wie viele es sind, folgt aus der Preisprobe.
+- **Die 17 Gruppen** (`src/groups.ts`):
+  - Jede ist als Gittertyp plus Nebenklassenvertreter in Gitterkoordinaten
+    abgelegt.
+  - Für die Generierung werden die Kopien als Gittertranslation ∘ Nebenklasse
+    aufgezählt (`src/tiling.ts`).
+  - Aus einer Analyse gewinnt `realizationFromConstruction` Gitter und
+    Nebenklassen zurück.
 
-- `tiler.lattice` — the 5 Bravais lattice types (oblique, rectangular, centered
-  rectangular, square, hexagonal) and their basis vectors.
-- `tiler.groups` — the 17 wallpaper groups, each as a lattice type plus coset
-  representatives of its point group (rotations, mirrors, glides). Verified for
-  correct order and closure in `tests/test_groups.py`.
-- `tiler.fundamental_domain` — the true fundamental-domain polygon, built as a
-  Dirichlet (Voronoi) cell of the group's orbit — general for all 17 groups, not
-  hand-derived per group. Verified (area, convexity, and gap/overlap-free tiling
-  under random sampling) in `tests/test_fundamental_domain.py`.
-- `tiler.image_source` — PNG/SVG format detection and intrinsic pixel-size parsing.
-- `tiler.domain` — `FundamentalDomain` (paths + optional `ImagePlacement`) and the
-  `polygon` property.
-- `tiler.render` — `covering_transforms()` (the shared translation × point-group
-  enumeration), `generate_covering()` for vector paths, and `svg_from_paths()`.
-- `tiler.widget` — the interactive `TilerWidget` (ipywidgets + ipycanvas). Image
-  compositing is done directly on the HTML canvas: each copy is
-  `canvas.clip()`-ped to the fundamental-domain polygon under that copy's
-  symmetry transform, then `draw_image()`-ed.
-
-## Note on image placement
-
-The auto-fit on image load scales to the fundamental domain's axis-aligned
-*bounding box*, not the polygon itself — for a non-rectangular domain (e.g. the
-triangular one in p4m/p31m/p6m) the image may slightly overflow the polygon at
-first; the visible tiling is still exactly correct since the covering always clips
-to the true polygon, so just scale/reposition until it looks right.
-
-## Tests
+## Entwicklung
 
 ```bash
-pytest
+npm test          # Vitest
+npm run typecheck
+npm run build     # statische Dateien nach dist/ (relative Pfade, z. B. für GitHub Pages)
+npm run preview   # den Build lokal ansehen
 ```
+
+| Datei | Inhalt |
+|---|---|
+| `src/isometry.ts`, `src/group.ts` | Isometrien, Gruppenerzeugung |
+| `src/construction.ts` | Bahn, Dirichlet-Bereich, Warnungen |
+| `src/inventory.ts`, `src/orbifold.ts` | Conway-Notation, Preisprobe |
+| `src/overlay.ts` | Prüfung am Bild |
+| `src/groups.ts`, `src/tiling.ts` | die 17 Gruppen, Pflasterung für die Generierung |
+| `src/scene.ts`, `src/view.ts` | eingezeichnete Elemente, Einrasten; Verschieben und Zoomen |
+| `src/draw.ts`, `src/main.ts` | Zeichnen und Bedienung (Analyse) |
+| `src/generate.ts` | Zustand, Zeichnen, Export (Generierung) |
+| `tests/` | u. a. alle 17 Gruppen: Erkennung, lückenlose Pflasterung, Rückgewinnung aus der Analyse |
+
+Die Tests von Gruppenkern, Inventur und Pflasterung laufen ohne Browser. Die
+Bedienoberfläche ist von Hand und mit Playwright geprüft.
+
+## Herkunft
+
+Das Projekt begann als Python-Paket `tiler`, ein Jupyter-Widget zum Pflastern
+mit einer vorgegebenen Gruppe. Diese Version ist abgelöst und nur noch in der
+Git-Historie zu finden. Ihre Gruppentabelle lebt in `src/groups.ts` weiter, mit
+einer Korrektur: dort waren p3m1 und p31m vertauscht.
+
+## Lizenz
+
+MIT, siehe [LICENSE](LICENSE).

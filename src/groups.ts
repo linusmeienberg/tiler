@@ -3,9 +3,10 @@
  * the translation subgroup (linear part M and translation t, both in fractional
  * coordinates of the conventional basis a₁, a₂). The identity coset is implicit.
  *
- * Adapted from tiler/src/tiler/groups.py, with p3m1 and p31m the right way round
- * (they are swapped there): MHEX_A mirrors run along the lattice vectors, so the
- * triangle centers are 3-fold cones off the mirrors – 3*3 (p31m).
+ * Adapted from the earlier Python version of this project, with p3m1 and p31m
+ * the right way round (they were swapped there): MHEX_A mirrors run along the
+ * lattice vectors, so the triangle centers are 3-fold cones off the mirrors –
+ * 3*3 (p31m).
  */
 import type { Generator } from "./group";
 import { compose, identity, translation, type Isometry, type Point } from "./isometry";

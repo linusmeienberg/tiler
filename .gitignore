@@ -1,12 +1,6 @@
-__pycache__/
-*.pyc
-*.egg-info/
-.eggs/
-build/
+node_modules/
 dist/
-.venv/
-venv/
-.pytest_cache/
-.ruff_cache/
-.ipynb_checkpoints/
+coverage/
+*.local
 .DS_Store
+.venv/
