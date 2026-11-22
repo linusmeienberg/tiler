@@ -11,7 +11,7 @@ const params = { size: S, ratio: 1.4, angleDeg: 72 };
 function setup(conway: string, p = { x: 21.37, y: 13.12 }) {
   const c = construct(realize(findGroup(conway), params).generators, p, { radius: 8 * S });
   const inv = inventory(c, p)!;
-  const result = canonicalDomain(c, inv, p);
+  const result = canonicalDomain(c, inv, p, { x: 0, y: 0 });
   if ("error" in result) throw new Error(result.error);
   return { c, inv, p, d: result.domain };
 }
@@ -64,6 +64,29 @@ describe("canonical (orbifold) domain", () => {
     expect(d.edges.some((e) => e.via === "glide")).toBe(conway.includes("x"));
   });
 
+  it.each(GROUPS.map((g) => [g.conway] as const))("%s: the shape does not depend on p, only which copy", (conway) => {
+    const { c, d: d1 } = setup(conway, { x: 21.37, y: 13.12 });
+    const others = [
+      { x: 47.3, y: 31.9 },
+      { x: 3.3, y: 71.7 },
+      { x: 88.1, y: 9.4 },
+      { x: -41.2, y: -27.5 },
+    ];
+    for (const q of others) {
+      const { d: dk } = setup(conway, q);
+      // dk must be g(d1) for some group element g (same vertex set).
+      const same = c.elements.some(
+        (e) =>
+          dk.polygon.length === d1.polygon.length &&
+          d1.polygon.every((v) => {
+            const w = apply(e.g, v);
+            return dk.polygon.some((x) => Math.hypot(x.x - w.x, x.y - w.y) < 1e-6);
+          }),
+      );
+      expect(same).toBe(true);
+    }
+  });
+
   it("is the mirror chamber for kaleidoscopes (*442: triangle, all edges mirrors)", () => {
     const { d } = setup("*442");
     expect(d.polygon).toHaveLength(3);
@@ -77,8 +100,9 @@ describe("canonical (orbifold) domain", () => {
     expect(d.edges.every((e) => e.via === "rotation")).toBe(true);
   });
 
-  it("refuses p on a mirror", () => {
+  it("still picks one copy when p lies on a mirror (the boundary between two copies)", () => {
     const { c, inv } = setup("*442");
-    expect("error" in canonicalDomain(c, inv, { x: 30, y: 0 })).toBe(true);
+    const r = canonicalDomain(c, inv, { x: 30, y: 0 }, { x: 0, y: 0 });
+    expect("domain" in r && insideConvex({ x: 30, y: 0 }, r.domain.polygon, 1e-6)).toBe(true);
   });
 });

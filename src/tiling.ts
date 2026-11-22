@@ -44,7 +44,8 @@ export function buildTiling(realization: Realization, baseFrac: Point, mode: Dom
   let orbifoldError: string | null = null;
   if (mode === "orbifold") {
     const inv = inventory(c, base);
-    const r = inv ? canonicalDomain(c, inv, base) : { error: "keine Inventur" };
+    // Reference for the choices the group leaves open: the origin of the group table.
+    const r = inv ? canonicalDomain(c, inv, base, { x: 0, y: 0 }) : { error: "keine Inventur" };
     if ("error" in r) orbifoldError = r.error;
     else {
       domain = r.domain.polygon;

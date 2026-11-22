@@ -220,7 +220,9 @@ function currentDomain(): ShownDomain | null {
   if (domainMode === "voronoi") return { polygon: c.domain, orbifold: null, error: null };
   const fallback = " Gezeigt wird der Voronoi-Bereich.";
   if (!a.inventory) return { polygon: c.domain, orbifold: null, error: "Der Orbifold braucht eine gültige Inventur." + fallback };
-  if (canonicalCache.key !== a.key) canonicalCache = { key: a.key, result: canonicalDomain(c, a.inventory, scene.base) };
+  // The shape must not depend on p: open choices are decided by the first drawn element.
+  const reference = scene.elements[0]?.points[0] ?? scene.base;
+  if (canonicalCache.key !== a.key) canonicalCache = { key: a.key, result: canonicalDomain(c, a.inventory, scene.base, reference) };
   const r = canonicalCache.result!;
   if ("error" in r) return { polygon: c.domain, orbifold: null, error: r.error + fallback };
   return { polygon: r.domain.polygon, orbifold: r.domain, error: null };

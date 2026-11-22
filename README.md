@@ -108,7 +108,14 @@ Zoomen: ⌘/Strg und scrollen. »Einpassen«: Taste F.
   - Ein x gibt es, wenn eine Gleitspiegelung die spiegelfreie Kammer von p auf
     sich abbildet. Wie viele es sind, folgt aus der Preisprobe.
 - **Orbifold** (`src/canonical.ts`): eine Konstruktion für alle 17 Gruppen.
-  - Mit Spiegeln: die Spiegelkammer um p.
+  - Die Form hängt nur von der Gruppe und diesen Regeln ab, nie von p. Wo die
+    Gruppe eine Wahl offen lässt, entscheidet ein fester Bezugspunkt: der
+    erste Punkt des zuerst eingezeichneten Elements, in der Generierung der
+    Nullpunkt. Offen bleibt eine Wahl bei Klassen gleicher Ordnung, z. B. den
+    drei Klassen von 3-Zentren bei 333, und bei Schnitten, die durch kein
+    Zentrum gehen (\*\*, \*x, xx, o). Gebaut wird am Bezugspunkt; p wählt danach
+    nur die Kopie.
+  - Mit Spiegeln: eine Spiegelkammer.
     - Liegt darin eine Kegelspitze der Ordnung n, wird ein 1/n-Keil der Kammer
       genommen.
     - Bei parallelen Spiegeln: eine Periode des Streifens, geschnitten an

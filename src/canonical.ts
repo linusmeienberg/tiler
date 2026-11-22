@@ -5,9 +5,9 @@
  *
  * One construction for all 17 groups, from the inventory:
  *
- * 1. Mirrors in several directions: the chamber (region bounded by mirrors)
- *    containing p. If a cone point of order n lies inside, a 1/n wedge of the
- *    chamber from it (rays through chamber corners).
+ * 1. Mirrors in several directions: a chamber (region bounded by mirrors). If a
+ *    cone point of order n lies inside, a 1/n wedge of the chamber from it (rays
+ *    through chamber corners).
  * 2. Parallel mirrors: one period of the strip between neighbouring mirrors;
  *    with cone points, cut through two consecutive ones (perpendicular to the
  *    strip); with a glide axis inside the strip, the half on p's side.
@@ -17,8 +17,14 @@
  * 4. Only glides: one period of the strip between neighbouring glide axes.
  * 5. Only translations: the lattice parallelogram.
  *
- * The copy containing p is used. Then cone/corner points on the boundary become
- * vertices, and every non-mirror edge is matched with the edge it is glued to.
+ * The shape is fixed by the group and these rules alone. Where the group leaves a
+ * choice – between classes of centers of equal order (333, 2222, 2*22 …), or the
+ * position of cuts not through any center (**, *x, xx, o) – a fixed reference
+ * point decides: the class with a member nearest to it (then by angle), and cuts
+ * through it. p only selects which copy is shown: the one containing p.
+ *
+ * Then cone/corner points on the boundary become vertices, and every non-mirror
+ * edge is matched with the edge it is glued to.
  */
 import { clipByHalfPlane, dirichletDomain, type Construction } from "./construction";
 import { apply, inverse, kind, type Point } from "./isometry";
@@ -52,79 +58,112 @@ export interface OrbifoldDomain {
 
 export type CanonicalResult = { domain: OrbifoldDomain } | { error: string };
 
-export function canonicalDomain(c: Construction, inv: Inventory, p: Point): CanonicalResult {
+/**
+ * `reference`: decides the choices the group leaves open (see above); must not
+ * depend on p, e.g. the first drawn element or the lattice origin.
+ */
+export function canonicalDomain(c: Construction, inv: Inventory, p: Point, reference: Point): CanonicalResult {
   if (!c.translations) return { error: "Die Gruppe hat keine zwei unabhängigen Translationen." };
   const { t1, t2 } = c.translations;
   const cell = norm(t1) + norm(t2);
   const tol = 1e-6 * cell;
-  const box = square(p, 3 * cell);
-  const mirrors = inv.mirrors.filter((l) => distToLine(p, l) <= 4 * cell);
+
+  // Rank classes of centers by their member nearest to the reference point (ties: by angle).
+  const rankKey = new Map<number, [number, number]>();
+  for (const z of inv.centers) {
+    const d = dist(z.point, reference);
+    const a = (Math.atan2(z.point.y - reference.y, z.point.x - reference.x) + 2 * Math.PI) % (2 * Math.PI);
+    const prev = rankKey.get(z.classIndex);
+    if (!prev || d < prev[0] - 10 * tol || (Math.abs(d - prev[0]) <= 10 * tol && a < prev[1])) rankKey.set(z.classIndex, [d, a]);
+  }
+  const preferred = (classIndices: number[]): number =>
+    [...new Set(classIndices)].sort((i, j) => {
+      const [di, ai] = rankKey.get(i) ?? [Infinity, 0];
+      const [dj, aj] = rankKey.get(j) ?? [Infinity, 0];
+      return Math.abs(di - dj) > 10 * tol ? di - dj : ai - aj;
+    })[0];
+  // Everything is built at the reference point (nudged off any symmetry element
+  // by a fixed tiny offset), never at p – so the shape cannot depend on p.
+  const q = { x: reference.x + 0.0123 * cell, y: reference.y + 0.0071 * cell };
+  // Cut positions along u not fixed by any center: through the reference point, one period T apart, around p.
+  const periodAround = (u: Point, T: number): [number, number] => {
+    const s0 = dot(reference, u);
+    const lo = s0 + Math.floor((dot(q, u) - s0) / T) * T;
+    return [lo, lo + T];
+  };
+  const box = square(q, 3 * cell);
+  const mirrors = inv.mirrors.filter((l) => distToLine(q, l) <= 4 * cell);
   const cones = inv.centers.filter((z) => !inv.classes[z.classIndex].corner);
 
   let d0: Point[];
   if (mirrors.length > 0) {
-    if (mirrors.some((l) => distToLine(p, l) < 10 * tol)) return { error: "p liegt auf einer Spiegelachse." };
     const parallel = mirrors.every((l) => Math.abs(cross(l.u, mirrors[0].u)) < 1e-9);
-    const chamber = simplify(mirrors.reduce((poly, l) => keepSide(poly, l, p), box), tol);
+    const chamber = simplify(mirrors.reduce((poly, l) => keepSide(poly, l, q), box), tol);
     if (!parallel) {
       const inside = cones.filter((z) => strictlyInside(z.point, chamber, tol));
-      d0 = inside.length === 0 ? chamber : wedge(chamber, inside[0].point, inside[0].order, chamber[0], tol);
+      if (inside.length === 0) d0 = chamber;
+      else {
+        // Rays from the cone point through chamber corners of the preferred class.
+        const corners = inv.centers.filter((z) => chamber.some((v) => dist(v, z.point) < 10 * tol));
+        const k = preferred(corners.map((z) => z.classIndex));
+        const v = corners.find((z) => z.classIndex === k)?.point ?? chamber[0];
+        d0 = wedge(chamber, inside[0].point, inside[0].order, v, tol);
+      }
     } else {
       // A strip between two neighbouring mirrors.
       const u = mirrors[0].u;
       const T = norm(shortestAlong(u, t1, t2));
-      const inStrip = cones.filter((z) => strictlyInside(z.point, chamber, tol) && Math.abs(dot(sub(z.point, p), u)) < 2 * T);
+      const inStrip = cones.filter((z) => strictlyInside(z.point, chamber, tol) && Math.abs(dot(sub(z.point, q), u)) < 2 * T);
       let strip: Point[];
       if (inStrip.length > 0) {
         // Cut through a cone point and the next one along the strip.
         const sorted = inStrip.map((z) => z.point).sort((a, b) => dot(a, u) - dot(b, u));
-        const k = sorted.findIndex((z) => dot(z, u) >= dot(p, u) - tol);
+        const k = sorted.findIndex((z) => dot(z, u) >= dot(q, u) - tol);
         const z0 = sorted[k === -1 ? sorted.length - 2 : Math.max(0, k - 1)];
         const z1 = sorted.find((z) => dot(z, u) > dot(z0, u) + tol);
         if (!z1) return { error: "Zu wenige Drehzentren im Streifen gefunden." };
         strip = slab(chamber, u, dot(z0, u), dot(z1, u));
       } else {
-        strip = slab(chamber, u, dot(p, u) - T / 2, dot(p, u) + T / 2);
+        strip = slab(chamber, u, ...periodAround(u, T));
         const axis = inv.glides.find((l) => Math.abs(cross(l.u, u)) < 1e-9 && strictlyInsideLine(l, chamber, tol));
         if (axis) {
-          if (distToLine(p, axis) < 10 * tol) return { error: "p liegt auf einer Gleitachse." };
-          strip = keepSide(strip, axis, p);
+          strip = keepSide(strip, axis, q);
         }
       }
       d0 = strip;
     }
   } else if (cones.length > 0) {
     const maxOrder = Math.max(...cones.map((z) => z.order));
-    const c0 = cones
-      .filter((z) => z.order === maxOrder)
-      .sort((a, b) => dist(a.point, p) - dist(b.point, p))[0];
+    const top = cones.filter((z) => z.order === maxOrder);
+    const k0 = preferred(top.map((z) => z.classIndex));
+    const c0 = top.filter((z) => z.classIndex === k0).sort((a, b) => dist(a.point, q) - dist(b.point, q))[0];
     const orbitPoints = c.elements.map((e) => apply(e.g, c0.point)).filter((q) => dist(q, c0.point) <= 3 * cell);
     let cellPoly = simplify(dirichletDomain(c0.point, orbitPoints, 2 * cell), tol);
     const onBoundary = inv.centers.filter((z) => onPolygonBoundary(z.point, cellPoly, tol));
     cellPoly = insertPoints(cellPoly, onBoundary.map((z) => z.point), tol);
     const minOrder = Math.min(...onBoundary.map((z) => z.order));
-    const v = onBoundary.length > 0 ? onBoundary.find((z) => z.order === minOrder)!.point : cellPoly[0];
+    const lowest = onBoundary.filter((z) => z.order === minOrder);
+    const k1 = preferred(lowest.map((z) => z.classIndex));
+    const v = lowest.length > 0 ? lowest.find((z) => z.classIndex === k1)!.point : cellPoly[0];
     d0 = wedge(cellPoly, c0.point, c0.order, v, tol);
   } else if (inv.glides.length > 0) {
     const u = inv.glides[0].u;
     const parallelAxes = inv.glides.filter((l) => Math.abs(cross(l.u, u)) < 1e-9);
-    if (parallelAxes.some((l) => distToLine(p, l) < 10 * tol)) return { error: "p liegt auf einer Gleitachse." };
     const T = norm(shortestAlong(u, t1, t2));
-    const strip = parallelAxes.filter((l) => distToLine(p, l) <= 2 * cell).reduce((poly, l) => keepSide(poly, l, p), box);
-    d0 = slab(strip, u, dot(p, u) - T / 2, dot(p, u) + T / 2);
+    const strip = parallelAxes.filter((l) => distToLine(q, l) <= 2 * cell).reduce((poly, l) => keepSide(poly, l, q), box);
+    d0 = slab(strip, u, ...periodAround(u, T));
   } else {
-    const o = { x: p.x - (t1.x + t2.x) / 2, y: p.y - (t1.y + t2.y) / 2 };
+    // The lattice parallelogram with a corner at the reference point.
+    const o = reference;
     d0 = [o, add(o, t1), add(add(o, t1), t2), add(o, t2)];
   }
 
-  // The copy that contains p.
+  // The copy that contains p. On a boundary between copies (p on a mirror, a
+  // center or a glued edge) the first in BFS order wins.
   d0 = simplify(d0, tol, inv.centers.map((z) => z.point));
-  let polygon = d0;
-  if (!insideConvex(p, d0, tol)) {
-    const hit = c.elements.find((e) => insideConvex(apply(inverse(e.g), p), d0, tol));
-    if (!hit) return { error: "Kein Bereich enthält p." };
-    polygon = d0.map((v) => apply(hit.g, v));
-  }
+  const hit = c.elements.find((e) => insideConvex(apply(inverse(e.g), p), d0, tol));
+  if (!hit) return { error: "Kein Bereich enthält p." };
+  let polygon = d0.map((v) => apply(hit.g, v));
   polygon = orientCCW(polygon);
   polygon = insertPoints(polygon, inv.centers.map((z) => z.point), tol);
 
