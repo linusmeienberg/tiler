@@ -88,7 +88,9 @@ describe("construct", () => {
 
   it("warns when the start point lies on a mirror", () => {
     const c = construct([...P4M], { x: 0.3, y: 0 }, { radius: 6 });
-    expect(c.warnings.some((w) => w.includes("Symmetrieelement"))).toBe(true);
+    expect(c.pointWarnings.some((w) => w.includes("Symmetrieelement"))).toBe(true);
+    expect(c.groupWarnings).toEqual([]); // the group itself is fine
+    expect(c.onElement).toBe(true);
     expect(c.copiesPerCell).toBeNull();
   });
 
@@ -116,12 +118,13 @@ describe("construct", () => {
       { name: "r", g: rotation({ x: 0, y: 0 }, 3) },
     ];
     const c = construct(gens, p, { radius: 4, maxElements: 3000 });
-    expect(c.warnings.some((w) => w.includes("nicht diskret"))).toBe(true);
+    expect(c.groupWarnings.some((w) => w.includes("nicht diskret"))).toBe(true);
+    expect(c.discrete).toBe(false);
   });
 
   it("warns when there are not enough translations (a single mirror)", () => {
     const c = construct([P4M[0]], p, { radius: 6 });
     expect(c.elements).toHaveLength(2);
-    expect(c.warnings.some((w) => w.includes("Translationen"))).toBe(true);
+    expect(c.groupWarnings.some((w) => w.includes("Translationen"))).toBe(true);
   });
 });

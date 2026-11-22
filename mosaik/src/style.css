@@ -223,20 +223,49 @@ aside h2:not(:first-child) {
   color: #57534e;
 }
 
-#cover-warnings,
-#inv-problems {
+.warnings {
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-#cover-warnings li,
-#inv-problems li {
+.warnings li {
   background: #fef2f2;
   border-left: 4px solid #dc2626;
   padding: 6px 8px;
   margin-bottom: 6px;
   border-radius: 4px;
+}
+
+.segmented {
+  display: flex;
+  margin: 6px 0;
+}
+
+.segmented button {
+  flex: 1;
+  border-radius: 0;
+  padding: 5px 4px;
+}
+
+.segmented button:first-child {
+  border-radius: 6px 0 0 6px;
+}
+
+.segmented button:last-child {
+  border-radius: 0 6px 6px 0;
+}
+
+.segmented button + button {
+  border-left: none;
+}
+
+#check-info {
+  color: #57534e;
+}
+
+#group-warnings {
+  margin-bottom: 12px;
 }
 
 footer {

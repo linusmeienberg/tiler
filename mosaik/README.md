@@ -59,6 +59,24 @@ Schritt 4 – Inventur und Conway-Notation:
 - Getestet für alle 17 Gruppen. Hinweis: `tiler/groups.py` hat p3m1 und p31m
   vertauscht (siehe `tests/inventory.test.ts`).
 
+Prüfung ohne Startpunkt:
+
+- Gruppe, Verträglichkeitswarnungen (nicht diskret, zu wenige Translationen)
+  und Inventur werden berechnet, sobald Elemente da sind – ohne p mit einem
+  automatisch gewählten Hilfspunkt. Die Warnungen stehen unter »Erzeuger«.
+  Bereich, Kopien und Wortlänge (»Aufbau«) brauchen weiterhin ein echtes p.
+
+Schritt 5 – Prüfung am Bild:
+
+- `src/overlay.ts` – das Bild wird nur aus dem Inhalt von D aufgebaut (D mit
+  jedem Gruppenelement g in die Kopie g(D) gezeichnet, Canvas-Clip, Arbeits-
+  auflösung höchstens 1200 px) und mit dem Original verglichen (mittlere
+  RGB-Differenz nach 1 px Weichzeichnen). Vergleichswert: das Bild gegen sich
+  selbst um einen generischen Bruchteil des Gitters verschoben, also »gar keine
+  Symmetrie«. Verhältnis < 0,3 gilt als passend, > 0,6 als unpassend (grobe
+  Faustregel).
+- Ansichten Original / Aus D / Differenz (rot = Abweichung).
+
 ## Entwicklung
 
 ```bash

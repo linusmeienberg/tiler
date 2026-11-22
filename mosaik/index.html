@@ -21,6 +21,7 @@
         <h2>Erzeuger</h2>
         <ul id="elements"></ul>
         <p class="empty" id="no-elements">Noch keine Elemente.</p>
+        <ul id="group-warnings" class="warnings"></ul>
         <button id="clear">Alle löschen</button>
 
         <h2>Aufbau</h2>
@@ -35,17 +36,26 @@
           <label class="row"><input type="checkbox" id="show-orbit" checked /> Bahn von p</label>
           <p id="cover-info"></p>
           <p id="cover-hover"></p>
-          <ul id="cover-warnings"></ul>
+          <ul id="cover-warnings" class="warnings"></ul>
         </div>
 
         <h2>Inventur</h2>
-        <div id="inv-empty" class="empty">Erscheint, sobald p gesetzt ist und die Gruppe zwei unabhängige Translationen hat.</div>
+        <div id="inv-empty" class="empty">Erscheint, sobald die Elemente eine Ornamentgruppe erzeugen (zwei unabhängige Translationen).</div>
         <div id="inv">
           <div id="inv-symbol"><span id="inv-conway"></span> <span id="inv-name"></span></div>
           <table id="inv-table"></table>
           <p id="inv-check"></p>
-          <ul id="inv-problems"></ul>
+          <ul id="inv-problems" class="warnings"></ul>
           <label class="row"><input type="checkbox" id="show-derived" checked /> Alle Symmetrieelemente der Gruppe</label>
+        </div>
+
+        <h2>Prüfung am Bild</h2>
+        <div id="check-empty" class="empty">Braucht ein Bild, den Startpunkt p und eine Ornamentgruppe.</div>
+        <div id="check">
+          <div class="segmented" id="image-mode">
+            <button data-mode="original">Original</button><button data-mode="reconstruction">Aus D</button><button data-mode="difference">Differenz</button>
+          </div>
+          <p id="check-info"></p>
         </div>
       </aside>
     </main>

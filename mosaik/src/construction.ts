@@ -21,6 +21,15 @@ export interface Construction {
   translations: { t1: Point; t2: Point } | null;
   /** Primitive cell area / domain area: the number of fundamental domains per cell. */
   copiesPerCell: number | null;
+  /** The group generates a lattice of translations (and nothing arbitrarily small). */
+  discrete: boolean;
+  /** p lies on a mirror or rotation center (then D is too large). */
+  onElement: boolean;
+  /** About the generators alone: not discrete, too few translations. */
+  groupWarnings: string[];
+  /** About the choice of p: on an element, sliver domain. */
+  pointWarnings: string[];
+  /** groupWarnings followed by pointWarnings. */
   warnings: string[];
 }
 
@@ -36,17 +45,18 @@ export function construct(generators: Generator[], p: Point, options: ConstructO
   const orbit = elements.map((e) => apply(e.g, p));
   const domain = dirichletDomain(p, orbit, radius);
   const translations = translationBasis(elements);
-  const warnings: string[] = [];
+  const groupWarnings: string[] = [];
+  const pointWarnings: string[] = [];
 
   const capped = elements.length >= maxElements;
   const shortest = translations ? norm(translations.t1) : Infinity;
   if (capped || shortest < 0.5) {
-    warnings.push(
+    groupWarnings.push(
       "Die Elemente passen nicht zusammen: Die erzeugte Gruppe ist nicht diskret " +
         "(beliebig kleine Verschiebungen). Prüfe Ordnungen, Lage und Gitter.",
     );
   } else if (!translations) {
-    warnings.push(
+    groupWarnings.push(
       "Keine zwei unabhängigen Translationen – das ist (noch) keine Ornamentgruppe, " +
         "der Fundamentalbereich ist unbeschränkt. Gitter einzeichnen oder Elemente ergänzen.",
     );
@@ -56,12 +66,12 @@ export function construct(generators: Generator[], p: Point, options: ConstructO
   const nearest = Math.min(...orbit.slice(1).map((q) => dist(q, p)));
   const onElement = nearest < 1e-6;
   if (onElement) {
-    warnings.push(
+    pointWarnings.push(
       "Der Startpunkt liegt auf einem Symmetrieelement (Spiegelachse oder Drehzentrum); " +
         "der Bereich ist darum zu groß. Startpunkt etwas verschieben.",
     );
   } else if (discrete && translations && elongation(domain) > 8) {
-    warnings.push(
+    pointWarnings.push(
       "Der Fundamentalbereich ist lang und schmal. Ein anderer Startpunkt macht ihn vielleicht kompakter.",
     );
   }
@@ -78,7 +88,11 @@ export function construct(generators: Generator[], p: Point, options: ConstructO
     maxLength: elements.reduce((m, e) => Math.max(m, e.length), 0),
     translations,
     copiesPerCell,
-    warnings,
+    discrete,
+    onElement,
+    groupWarnings,
+    pointWarnings,
+    warnings: [...groupWarnings, ...pointWarnings],
   };
 }
 

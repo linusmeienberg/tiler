@@ -2,6 +2,7 @@
 import type { Construction } from "./construction";
 import type { Inventory } from "./inventory";
 import type { Point } from "./isometry";
+import type { OverlayResult } from "./overlay";
 import { labels, latticeBasis, type RotationOrder, type Scene, type SceneElement } from "./scene";
 import { toScreen, toWorld, type View } from "./view";
 
@@ -20,14 +21,12 @@ export interface Preview {
   to: Point;
 }
 
-/** What to show of the construction (orbit, Dirichlet domain and its copies). */
 /** Colors of the rotation-center orbit classes (inventory rows and canvas rings). */
 export const CLASS_COLORS = ["#0891b2", "#c026d3", "#65a30d", "#ea580c", "#4f46e5", "#0d9488"];
 
+/** What to show of the construction (orbit, Dirichlet domain and its copies). */
 export interface CoverState {
   construction: Construction;
-  inventory: Inventory | null;
-  showDerived: boolean;
   base: Point;
   /** Show copies g(D) and orbit points g(p) with word length ≤ maxLength. */
   maxLength: number;
@@ -36,8 +35,14 @@ export interface CoverState {
   hovered: number | null; // element index
 }
 
+export type ImageMode = "original" | "reconstruction" | "difference";
+
 export interface DrawState {
   cover: CoverState | null;
+  /** All symmetry elements of the group, or null to hide them. */
+  derived: Inventory | null;
+  /** Replaces the plain image in the overlay check. */
+  overlay: { mode: ImageMode; result: OverlayResult } | null;
   view: View;
   width: number; // CSS pixels
   height: number;
@@ -62,7 +67,17 @@ export function draw(ctx: CanvasRenderingContext2D, st: DrawState): void {
     ctx.save();
     ctx.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * view.ox, dpr * view.oy);
     ctx.imageSmoothingQuality = "high";
-    ctx.drawImage(st.image, 0, 0);
+    const overlay = st.overlay?.mode === "original" ? null : st.overlay;
+    if (overlay) {
+      // Faded original underneath, so uncovered parts stay recognizable.
+      ctx.globalAlpha = overlay.mode === "difference" ? 0.35 : 0.25;
+      ctx.drawImage(st.image, 0, 0);
+      ctx.globalAlpha = 1;
+      const layer = overlay.mode === "reconstruction" ? overlay.result.reconstruction : overlay.result.difference;
+      ctx.drawImage(layer, 0, 0, layer.width / overlay.result.scale, layer.height / overlay.result.scale);
+    } else {
+      ctx.drawImage(st.image, 0, 0);
+    }
     ctx.restore();
   } else {
     ctx.fillStyle = "#78716c";
@@ -73,7 +88,7 @@ export function draw(ctx: CanvasRenderingContext2D, st: DrawState): void {
   }
 
   if (st.cover) drawCover(ctx, st, st.cover);
-  if (st.cover?.inventory && st.cover.showDerived) drawDerived(ctx, st, st.cover.inventory);
+  if (st.derived) drawDerived(ctx, st, st.derived);
 
   const names = labels(st.scene);
   const sorted = [...st.scene.elements].sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind]);
