@@ -9,7 +9,7 @@
  * outside is an arbitrary choice – a slider shifts it around the tube.
  */
 import * as THREE from "three";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { ArcballControls } from "three/examples/jsm/controls/ArcballControls.js";
 import type { Point } from "./isometry";
 
 /** A pattern with a lattice: renders one cell for the basis (a, b). */
@@ -43,7 +43,7 @@ const MAX_TUBE_RATIO = 0.5;
 let renderer: THREE.WebGLRenderer | null = null;
 let scene: THREE.Scene;
 let camera: THREE.PerspectiveCamera;
-let controls: OrbitControls;
+let controls: ArcballControls;
 let mesh: THREE.Mesh | null = null;
 let texture: THREE.CanvasTexture | null = null;
 let shown = { key: "", swap: false };
@@ -67,9 +67,14 @@ function ensureRenderer(): void {
   const sun = new THREE.DirectionalLight(0xffffff, 1.4);
   sun.position.set(2, 3, 4);
   scene.add(sun);
-  controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;
-  resetCamera();
+  // Free rotation like a trackball under the cursor (no locked up axis, so the
+  // torus can be turned over): left drag rotates, right drag pans, wheel zooms.
+  camera.position.set(0, -2.6, 2.4);
+  camera.up.set(0, 0, 1);
+  camera.lookAt(0, 0, 0);
+  controls = new ArcballControls(camera, renderer.domElement, scene);
+  controls.setGizmosVisible(false);
+  controls.saveState();
   new ResizeObserver(resize).observe(container);
 }
 
@@ -84,10 +89,7 @@ function resize(): void {
 
 export function resetCamera(): void {
   if (!renderer) return;
-  camera.position.set(0, -2.6, 2.4);
-  camera.up.set(0, 0, 1);
-  controls.target.set(0, 0, 0);
-  controls.update();
+  controls.reset();
 }
 
 export function setActive(on: boolean): void {
