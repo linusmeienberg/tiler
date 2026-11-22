@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mosaik-Symmetrie</title>
+  </head>
+  <body>
+    <header class="toolbar">
+      <div class="group" id="tools"></div>
+      <div class="group" id="orders" title="Ordnung des Drehzentrums (Tasten 2, 3, 4, 6)"></div>
+      <div class="group">
+        <label class="button">Bild laden<input type="file" id="file" accept="image/*" hidden /></label>
+        <button id="example">Beispiel</button>
+        <button id="fit" title="Ansicht einpassen (F)">Einpassen</button>
+      </div>
+    </header>
+    <main>
+      <div id="stage"><canvas id="canvas"></canvas></div>
+      <aside>
+        <h2>Erzeuger</h2>
+        <ul id="elements"></ul>
+        <p class="empty" id="no-elements">Noch keine Elemente.</p>
+        <button id="clear">Alle löschen</button>
+      </aside>
+    </main>
+    <footer id="status"></footer>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
