@@ -36,7 +36,7 @@ let orb: Orb | null = null;
 let orbLoading: Promise<Orb> | null = null;
 function loadOrb(): Promise<Orb> {
   orbLoading ??= import("./orbifold3d").then((m) => {
-    m.init(stage);
+    m.init(stage, () => requestRender());
     orb = m;
     return m;
   });
@@ -479,6 +479,7 @@ function analysisSource(): PatternSource | null {
   const base = scene.base;
   if (!c?.translations || c.copiesPerCell === null || !img || !base || !domain) return null;
   const inv = a.inventory;
+  const elements = c.elements.map((e) => e.g);
   // The canonical domain for the body, whatever domain is chosen for display.
   let orbifold: OrbifoldDomain | null = null;
   const reference = scene.elements[0]?.points[0] ?? base;
@@ -497,16 +498,21 @@ function analysisSource(): PatternSource | null {
     t2: c.translations.t2,
     orbifold,
     lines: inv ? { mirrors: inv.mirrors, glides: inv.glides, centers: inv.centers, t1: c.translations.t1, t2: c.translations.t2, reference } : null,
-    render: (av, bv, at, marks) =>
+    base,
+    // The drawn generators define the group (moving p or the image does not change it).
+    groupKey: JSON.stringify(scene.elements),
+    copies: () => elements,
+    render: (av, bv, { origin, marks, strokes }) =>
       renderCell({
         a: av,
         b: bv,
-        origin: at ?? { x: base.x - (av.x + bv.x) / 2, y: base.y - (av.y + bv.y) / 2 },
+        origin,
         ...cellSize(av, bv),
         domain: domain.polygon,
-        copies: c.elements.map((e) => e.g),
+        copies: elements,
         paint: (ctx) => ctx.drawImage(img, 0, 0),
-        marks: marks && orbifold ? { domain: orbifold, copies: c.elements.map((e) => e.g), ...marks } : undefined,
+        marks: marks && orbifold ? { domain: orbifold, copies: elements, ...marks } : undefined,
+        strokes: strokes?.length ? { list: strokes, copies: elements } : undefined,
       }),
   };
 }
@@ -567,6 +573,9 @@ function renderOrbifold(): void {
   $("#orb-torus-controls").hidden = !torusShown;
   $("#orb-body-controls").hidden = torusShown;
   $("#orb-shift-value").textContent = `${Math.round(torus.shift * 360)}°`;
+  $("#orb-width-value").textContent = `${$<HTMLInputElement>("#orb-width").value} px`;
+  const n = orb.strokeCount();
+  $("#orb-strokes").textContent = n ? `${n} Strich${n === 1 ? "" : "e"}` : "";
   $("#orb-inflate-value").textContent = `${Math.round(torus.inflate * 100)} %`;
   if (!source || !info) return;
   $("#orb-label").textContent = source.label;
@@ -971,7 +980,9 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "Alt") altDown = true;
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
     e.preventDefault();
-    undo();
+    if (mode === "orbifold") orb?.undoStroke();
+    else undo();
+    requestRender();
     return;
   }
   if (e.metaKey || e.ctrlKey) return;
@@ -1176,6 +1187,7 @@ function setMode(m: Mode): void {
   if (m === "orbifold" && !orb) {
     void loadOrb().then((o) => {
       o.setActive(mode === "orbifold");
+      brushFromPanel();
       requestRender();
     });
   }
@@ -1205,6 +1217,24 @@ for (const btn of document.querySelectorAll<HTMLButtonElement>("#orb-view button
     requestRender();
   });
 }
+// Painting on the 3D body.
+const brushFromPanel = () => {
+  orb?.setBrush({
+    enabled: $<HTMLInputElement>("#orb-paint").checked,
+    color: $<HTMLInputElement>("#orb-color").value,
+    width: Number($<HTMLInputElement>("#orb-width").value),
+  });
+  requestRender();
+};
+for (const id of ["#orb-paint", "#orb-color", "#orb-width"]) $(id).addEventListener("input", brushFromPanel);
+$("#orb-undo").addEventListener("click", () => {
+  orb?.undoStroke();
+  requestRender();
+});
+$("#orb-clear").addEventListener("click", () => {
+  orb?.clearStrokes();
+  requestRender();
+});
 $<HTMLInputElement>("#orb-marks").addEventListener("change", (e) => {
   torus.marks = (e.target as HTMLInputElement).checked;
   requestRender();

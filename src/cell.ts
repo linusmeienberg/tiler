@@ -23,6 +23,68 @@ export interface CellOptions {
   background?: string;
   /** Draw the orbifold marks (edge roles, gluing ticks and arrows, centers) of every copy g(D) over the content. */
   marks?: { domain: OrbifoldDomain; copies: Isometry[]; inset?: boolean; centers?: boolean };
+  /** Painted strokes (world coordinates), drawn under every group element in `copies`. */
+  strokes?: { list: Stroke[]; copies: Isometry[] };
+}
+
+export interface Stroke {
+  points: Point[];
+  color: string;
+  width: number; // world units
+}
+
+/** World → canvas transform of a cell, as canvas setTransform arguments. */
+export function cellTransform(a: Point, b: Point, origin: Point, W: number, H: number): [number, number, number, number, number, number] {
+  const det = a.x * b.y - a.y * b.x;
+  const m00 = (W * b.y) / det;
+  const m01 = (-W * b.x) / det;
+  const m10 = (-H * a.y) / det;
+  const m11 = (H * a.x) / det;
+  return [m00, m10, m01, m11, -(m00 * origin.x + m01 * origin.y), -(m10 * origin.x + m11 * origin.y)];
+}
+
+/**
+ * Draw strokes (or a piece of one) under every group element whose image can
+ * reach the canvas – the painting continues across mirrors and glued edges.
+ */
+export function drawStrokes(
+  ctx: CanvasRenderingContext2D,
+  transform: [number, number, number, number, number, number],
+  strokes: Stroke[],
+  copies: Isometry[],
+): void {
+  const [m00, m10, m01, m11, e, f] = transform;
+  const W = ctx.canvas.width;
+  const H = ctx.canvas.height;
+  const perUnit = Math.max(Math.hypot(m00, m10), Math.hypot(m01, m11));
+  for (const s of strokes) {
+    if (s.points.length === 0) continue;
+    const c = s.points.reduce((acc, p) => ({ x: acc.x + p.x / s.points.length, y: acc.y + p.y / s.points.length }), { x: 0, y: 0 });
+    const reach = (Math.max(...s.points.map((p) => Math.hypot(p.x - c.x, p.y - c.y))) + s.width) * perUnit;
+    for (const g of copies) {
+      const w = apply(g, c);
+      const x = m00 * w.x + m01 * w.y + e;
+      const y = m10 * w.x + m11 * w.y + f;
+      if (x < -reach || y < -reach || x > W + reach || y > H + reach) continue;
+      ctx.save();
+      ctx.setTransform(m00, m10, m01, m11, e, f);
+      ctx.transform(g.a, g.c, g.b, g.d, g.tx, g.ty);
+      ctx.strokeStyle = s.color;
+      ctx.fillStyle = s.color;
+      ctx.lineWidth = s.width;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      if (s.points.length === 1) {
+        ctx.arc(s.points[0].x, s.points[0].y, s.width / 2, 0, 2 * Math.PI);
+        ctx.fill();
+      } else {
+        s.points.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
 }
 
 export function renderCell(o: CellOptions): HTMLCanvasElement {
@@ -67,6 +129,8 @@ export function renderCell(o: CellOptions): HTMLCanvasElement {
     o.paint(ctx);
     ctx.restore();
   }
+
+  if (o.strokes) drawStrokes(ctx, [m00, m10, m01, m11, e, f], o.strokes.list, o.strokes.copies);
 
   if (o.marks) {
     const D = o.marks.domain.polygon;

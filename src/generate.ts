@@ -522,6 +522,7 @@ export function tilingSvg(t: Tiling, view: View, width: number, height: number):
 // --- for the orbifold view ------------------------------------------------------------
 
 let canonicalCache: { key: string; domain: OrbifoldDomain | null; lines: GroupLines | null } = { key: "", domain: null, lines: null };
+let copiesCache: { key: string; copies: Isometry[] } = { key: "", copies: [] };
 
 /** One lattice cell of the current tiling, for the 3D view (null without motif). */
 export function patternSource(): PatternSource | null {
@@ -549,8 +550,19 @@ export function patternSource(): PatternSource | null {
     t2,
     orbifold: canonicalCache.domain,
     lines: canonicalCache.lines,
-    render(a, b, at, marks) {
-      const origin = at ?? { x: t.base.x - (a.x + b.x) / 2, y: t.base.y - (a.y + b.y) / 2 };
+    base: t.base,
+    // The group: which one, on which lattice (moving p or the motif does not change it).
+    groupKey: JSON.stringify([settings.group, settings.params, settings.custom?.label ?? null]),
+    copies: () => {
+      // Group elements within a few cells of p – enough to cover any texture region.
+      if (copiesCache.key !== cache.key) {
+        const pad = 3 * (Math.hypot(t1.x, t1.y) + Math.hypot(t2.x, t2.y));
+        const rect = { x0: t.base.x - pad, y0: t.base.y - pad, x1: t.base.x + pad, y1: t.base.y + pad };
+        copiesCache = { key: cache.key, copies: visibleCopies(t, rect, 40000) ?? [] };
+      }
+      return copiesCache.copies;
+    },
+    render(a, b, { origin, marks, strokes }) {
       const xs = [0, 1].flatMap((u) => [0, 1].map((v) => origin.x + u * a.x + v * b.x));
       const ys = [0, 1].flatMap((u) => [0, 1].map((v) => origin.y + u * a.y + v * b.y));
       const pad = Math.hypot(t1.x, t1.y) + Math.hypot(t2.x, t2.y); // the canonical D may reach further than the tiling's
@@ -570,6 +582,7 @@ export function patternSource(): PatternSource | null {
           ctx.drawImage(img, -img.width / 2, -img.height / 2);
         },
         marks: marks && orbifold ? { domain: orbifold, copies, ...marks } : undefined,
+        strokes: strokes?.length ? { list: strokes, copies } : undefined,
       });
     },
   };

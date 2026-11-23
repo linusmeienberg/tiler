@@ -52,6 +52,21 @@
             </div>
             <p id="orb-info" class="info"></p>
             <label class="row"><input type="checkbox" id="orb-marks" checked /> Markierungen des Orbifolds</label>
+
+            <h2>Malen</h2>
+            <label class="row"><input type="checkbox" id="orb-paint" /> Malen – auf dem Körper ziehen</label>
+            <div class="row">
+              <input type="color" id="orb-color" value="#b91c1c" title="Farbe" />
+              <label class="slider grow">Pinsel <span id="orb-width-value"></span><input type="range" id="orb-width" min="1" max="40" step="1" value="6" /></label>
+            </div>
+            <div class="row">
+              <button id="orb-undo" title="⌘Z">Rückgängig</button><button id="orb-clear">Alles löschen</button>
+              <span id="orb-strokes" class="info"></span>
+            </div>
+            <p class="info">
+              Jeder Strich erscheint in allen Kopien und läuft über Spiegel und Klebekanten weiter. Neben dem Körper
+              ziehen dreht weiterhin. Ändert sich die Symmetriegruppe, wird die Malerei gelöscht.
+            </p>
             <p class="info legend">
               Wie im Muster: Spiegelkanten <b class="c-mirror">blau</b>, gleich markierte Kanten werden verklebt –
               durch eine <b>Drehung</b>, eine <b class="c-translation">Translation</b> oder eine

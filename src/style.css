@@ -97,6 +97,18 @@ main {
   outline-offset: -3px;
 }
 
+.grow {
+  flex: 1;
+}
+
+#orb-color {
+  width: 36px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid #d6d3d1;
+  border-radius: 6px;
+}
+
 .orb-label {
   font-size: 22px;
   font-weight: 700;

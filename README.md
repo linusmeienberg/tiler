@@ -127,6 +127,22 @@ Bereichs D (`src/bodies.ts`):
     entlang der Spiegel bzw. Gleitachsen. Das ist der einzige stetige
     Freiheitsgrad, den diese Gruppen lassen.
 
+### Malen auf dem Orbifold
+
+Im Orbifold-Modus lässt sich direkt auf den 3D-Körper oder den Torus malen:
+Haken bei »Malen« setzen, dann auf der Fläche ziehen. Zieht man neben dem
+Körper, dreht sich die Ansicht weiterhin.
+
+- **Speicherung:** Jeder Strich wird in Musterkoordinaten gespeichert. Über die
+  Texturkoordinate des getroffenen Punkts kommt man vom Körper zurück zum
+  Muster.
+- **Darstellung:** Jeder Strich wird unter allen Gruppenelementen gezeichnet.
+  Darum läuft er über Spiegel und Klebekanten weiter, und auf dem Torus
+  erscheint er in allen Kopien.
+- **Werkzeuge:** Farbe, Pinselbreite, Rückgängig (⌘Z) und Alles löschen.
+- **Gruppenwechsel:** Ändert sich die Symmetriegruppe, wird die Malerei
+  gelöscht.
+
 ## Generierung
 
 - **Gruppe wählen.** Je nach Gittertyp stellt man Zellgröße, Seitenverhältnis

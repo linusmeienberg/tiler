@@ -7,13 +7,19 @@
  * lattice vectors: 2πR = |a|, 2πr = |b|), the outside is stretched by
  * (R + r)/R and the inside compressed by (R − r)/R. Which strip of the cell lies
  * outside is an arbitrary choice – a slider shifts it around the tube.
+ *
+ * Painting: in paint mode, dragging on the body (or torus) paints. The hit's
+ * texture coordinate leads back to a point of the pattern; strokes are kept in
+ * pattern coordinates and drawn under every group element, so they continue
+ * across mirrors and glued seams. They are cleared when the group changes.
  */
 import * as THREE from "three";
 import { ArcballControls } from "three/examples/jsm/controls/ArcballControls.js";
 import { buildBody, bodyKind, type BodyKind, type BodyMesh, type GroupLines } from "./bodies";
 import type { OrbifoldDomain } from "./canonical";
+import { cellTransform, drawStrokes, type Stroke } from "./cell";
 import { CLASS_COLORS, COLORS } from "./draw";
-import type { Point } from "./isometry";
+import type { Isometry, Point } from "./isometry";
 
 /** A pattern with a lattice: renders the parallelogram origin + [0,1)·a + [0,1)·b (default: a cell around p). */
 export interface PatternSource {
@@ -26,8 +32,20 @@ export interface PatternSource {
   orbifold: OrbifoldDomain | null;
   /** Mirrors, glide axes, centers and the reference point – for *x, xx, 22x. */
   lines: GroupLines | null;
-  /** `marks`: draw the orbifold's edge roles and gluing marks (and, if `centers`, the center symbols) into the texture. */
-  render(a: Point, b: Point, origin?: Point, marks?: MarkOptions | null): HTMLCanvasElement;
+  /** p: the torus cell is centered on it. */
+  base: Point;
+  /** Changes exactly when the symmetry group changes (then the painting is cleared). */
+  groupKey: string;
+  /** Group elements near the pattern region (for replicating strokes). */
+  copies(): Isometry[];
+  render(a: Point, b: Point, options: RenderOptions): HTMLCanvasElement;
+}
+
+export interface RenderOptions {
+  origin: Point;
+  /** Orbifold edge roles and gluing marks (and, if `centers`, the center symbols). */
+  marks?: MarkOptions | null;
+  strokes?: Stroke[];
 }
 
 export interface MarkOptions {
@@ -70,15 +88,44 @@ let camera: THREE.PerspectiveCamera;
 let controls: ArcballControls;
 let mesh: THREE.Mesh | null = null;
 let texture: THREE.CanvasTexture | null = null;
-let shown = { key: "", swap: false, marks: false };
+let shown = { key: "", swap: false, marks: false, strokes: -1 };
 let body: THREE.Group | null = null;
 let bodyKey = "";
 let bodyTexture: { key: string; texture: THREE.CanvasTexture } | null = null;
 let running = false;
 let container: HTMLElement;
 
-export function init(host: HTMLElement): void {
+// --- painting state ---
+let strokes: Stroke[] = [];
+let strokesVersion = 0;
+let groupKey = "";
+let currentSource: PatternSource | null = null;
+let brush = { enabled: false, color: "#b91c1c", width: 6 };
+/** What a ray can hit, and how its texture maps back to the pattern. */
+let paintTarget: { mesh: THREE.Mesh; texture: THREE.CanvasTexture; a: Point; b: Point; origin: Point } | null = null;
+let onPainted: () => void = () => {};
+
+export function init(host: HTMLElement, painted: () => void = () => {}): void {
   container = host;
+  onPainted = painted;
+}
+
+export function setBrush(b: Partial<typeof brush>): void {
+  brush = { ...brush, ...b };
+  if (renderer) renderer.domElement.style.cursor = brush.enabled ? "crosshair" : "";
+}
+
+export function strokeCount(): number {
+  return strokes.length;
+}
+
+export function undoStroke(): void {
+  if (strokes.pop()) strokesVersion++;
+}
+
+export function clearStrokes(): void {
+  if (strokes.length) strokesVersion++;
+  strokes = [];
 }
 
 function ensureRenderer(): void {
@@ -103,6 +150,73 @@ function ensureRenderer(): void {
   controls.setGizmosVisible(false);
   controls.saveState();
   new ResizeObserver(resize).observe(container);
+  // Capture phase: decide before the controls whether this drag paints or rotates.
+  renderer.domElement.addEventListener("pointerdown", startPainting, { capture: true });
+}
+
+// --- painting ------------------------------------------------------------------------------
+
+const raycaster = new THREE.Raycaster();
+
+/** The pattern point under a screen position, if the ray hits the painted surface. */
+function patternPointAt(e: PointerEvent): Point | null {
+  if (!paintTarget || !renderer) return null;
+  const rect = renderer.domElement.getBoundingClientRect();
+  const ndc = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+  raycaster.setFromCamera(ndc, camera);
+  const hit = raycaster.intersectObject(paintTarget.mesh, false)[0];
+  if (!hit?.uv) return null;
+  // Texture coordinate → image fraction (offset/repeat, wrapping and flipY applied) → pattern.
+  const uv = hit.uv.clone();
+  paintTarget.texture.transformUv(uv);
+  const { a, b, origin } = paintTarget;
+  return { x: origin.x + uv.x * a.x + uv.y * b.x, y: origin.y + uv.x * a.y + uv.y * b.y };
+}
+
+function startPainting(e: PointerEvent): void {
+  if (!brush.enabled || e.button !== 0 || !paintTarget || !currentSource) return;
+  const p = patternPointAt(e);
+  if (!p) return; // off the body: the controls rotate as usual
+  e.stopImmediatePropagation();
+  controls.enabled = false;
+  let current: Stroke = { points: [p], color: brush.color, width: brush.width };
+  strokes.push(current);
+  paintIncrement(current, [p]);
+  const move = (ev: PointerEvent) => {
+    const q = patternPointAt(ev);
+    if (!q) return;
+    const last = current.points[current.points.length - 1];
+    const step = Math.hypot(q.x - last.x, q.y - last.y);
+    if (step < brush.width * 0.25) return;
+    // Across a seam the pattern point jumps to another copy of the same place:
+    // continue in a new piece rather than drawing a line across the pattern.
+    if (step > brush.width * 12) {
+      current = { points: [q], color: brush.color, width: brush.width };
+      strokes.push(current);
+      paintIncrement(current, [q]);
+      return;
+    }
+    current.points.push(q);
+    paintIncrement(current, [last, q]);
+  };
+  const up = () => {
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", up);
+    controls.enabled = true;
+    onPainted();
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
+}
+
+/** Draw a new piece of a stroke into the texture currently shown, without re-rendering it. */
+function paintIncrement(stroke: Stroke, points: Point[]): void {
+  if (!paintTarget || !currentSource) return;
+  const canvas = paintTarget.texture.image as HTMLCanvasElement;
+  const ctx = canvas.getContext("2d")!;
+  const { a, b, origin } = paintTarget;
+  drawStrokes(ctx, cellTransform(a, b, origin, canvas.width, canvas.height), [{ ...stroke, points }], currentSource.copies());
+  paintTarget.texture.needsUpdate = true;
 }
 
 function resize(): void {
@@ -142,7 +256,14 @@ export function update(source: PatternSource | null, settings: TorusSettings): V
   ensureRenderer();
   if (mesh) mesh.visible = false;
   if (body) body.visible = false;
+  paintTarget = null;
+  currentSource = source;
   if (!source) return null;
+  // A different symmetry group: the painting no longer fits, start over.
+  if (source.groupKey !== groupKey) {
+    groupKey = source.groupKey;
+    clearStrokes();
+  }
   // The orbifold of o is the torus itself.
   if (settings.view === "orbifold" && source.symbol !== "o") {
     const m = showBody(source, settings);
@@ -166,9 +287,18 @@ function showTorus(source: PatternSource, settings: TorusSettings): TorusInfo {
   R *= scale;
   r *= scale;
 
-  if (shown.key !== source.key || shown.swap !== settings.swap || shown.marks !== settings.marks || !mesh) {
+  const origin = { x: source.base.x - (a.x + b.x) / 2, y: source.base.y - (a.y + b.y) / 2 };
+  if (
+    shown.key !== source.key ||
+    shown.swap !== settings.swap ||
+    shown.marks !== settings.marks ||
+    shown.strokes !== strokesVersion ||
+    !mesh
+  ) {
     texture?.dispose();
-    texture = new THREE.CanvasTexture(source.render(a, b, undefined, settings.marks ? { inset: false, centers: true } : null));
+    texture = new THREE.CanvasTexture(
+      source.render(a, b, { origin, marks: settings.marks ? { inset: false, centers: true } : null, strokes }),
+    );
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
@@ -184,10 +314,11 @@ function showTorus(source: PatternSource, settings: TorusSettings): TorusInfo {
     }
     mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ map: texture, roughness: 0.85, side: THREE.DoubleSide }));
     scene.add(mesh);
-    shown = { key: source.key, swap: settings.swap, marks: settings.marks };
+    shown = { key: source.key, swap: settings.swap, marks: settings.marks, strokes: strokesVersion };
   }
   mesh.visible = true;
   texture!.offset.set(0, settings.shift);
+  paintTarget = { mesh, texture: texture!, a, b, origin };
   const angle = (Math.acos(Math.abs(a.x * b.x + a.y * b.y) / (la * lb)) * 180) / Math.PI;
   return { bigCircle: la, tube: lb, stretch: (R + r) / R, squeeze: (R - r) / R, tubeFactor, angle };
 }
@@ -224,19 +355,23 @@ function showBody(source: PatternSource, settings: TorusSettings): BodyMesh | nu
   // Sliding along mirrors / glide axes only moves the texture (it spans a whole period).
   if (bodyMesh?.shiftable && bodyTexture) bodyTexture.texture.offset.set(settings.slide, 0);
   body!.visible = true;
+  const r = bodyMesh!.region;
+  paintTarget = { mesh: surface, texture: tex, a: r.a, b: r.b, origin: r.origin };
   return bodyMesh;
 }
 
 /** The texture is the world rectangle `region` around D; reused while only the inflation changes. */
 function textureFor(source: PatternSource, m: BodyMesh, marks: boolean): THREE.CanvasTexture {
   const r = m.region;
-  const key = JSON.stringify([source.key, r, marks]);
+  const key = JSON.stringify([source.key, r, marks, strokesVersion]);
   if (bodyTexture?.key !== key) {
     bodyTexture?.texture.dispose();
     // Bodies made from D itself have D's edges as their edges: draw the marks just inside.
     const inset = ["flat", "cylinder", "cone", "pillow"].includes(m.kind);
     // On bodies the coloured balls mark cone points and corners; no symbols in the texture.
-    const t = new THREE.CanvasTexture(source.render(r.a, r.b, r.origin, marks ? { inset, centers: false } : null));
+    const t = new THREE.CanvasTexture(
+      source.render(r.a, r.b, { origin: r.origin, marks: marks ? { inset, centers: false } : null, strokes }),
+    );
     t.colorSpace = THREE.SRGBColorSpace;
     if (m.shiftable) t.wrapS = THREE.RepeatWrapping;
     t.anisotropy = renderer!.capabilities.getMaxAnisotropy();
