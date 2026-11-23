@@ -26,8 +26,15 @@ export interface PatternSource {
   orbifold: OrbifoldDomain | null;
   /** Mirrors, glide axes, centers and the reference point – for *x, xx, 22x. */
   lines: GroupLines | null;
-  /** `marks`: draw the orbifold's edge roles, gluing marks and centers into the texture. */
-  render(a: Point, b: Point, origin?: Point, marks?: boolean, inset?: boolean): HTMLCanvasElement;
+  /** `marks`: draw the orbifold's edge roles and gluing marks (and, if `centers`, the center symbols) into the texture. */
+  render(a: Point, b: Point, origin?: Point, marks?: MarkOptions | null): HTMLCanvasElement;
+}
+
+export interface MarkOptions {
+  /** Just inside the edges (bodies made from D itself). */
+  inset: boolean;
+  /** Symbols for cone points and mirror corners (on bodies the coloured balls show them instead). */
+  centers: boolean;
 }
 
 export interface TorusSettings {
@@ -161,7 +168,7 @@ function showTorus(source: PatternSource, settings: TorusSettings): TorusInfo {
 
   if (shown.key !== source.key || shown.swap !== settings.swap || shown.marks !== settings.marks || !mesh) {
     texture?.dispose();
-    texture = new THREE.CanvasTexture(source.render(a, b, undefined, settings.marks));
+    texture = new THREE.CanvasTexture(source.render(a, b, undefined, settings.marks ? { inset: false, centers: true } : null));
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
@@ -228,7 +235,8 @@ function textureFor(source: PatternSource, m: BodyMesh, marks: boolean): THREE.C
     bodyTexture?.texture.dispose();
     // Bodies made from D itself have D's edges as their edges: draw the marks just inside.
     const inset = ["flat", "cylinder", "cone", "pillow"].includes(m.kind);
-    const t = new THREE.CanvasTexture(source.render(r.a, r.b, r.origin, marks, inset));
+    // On bodies the coloured balls mark cone points and corners; no symbols in the texture.
+    const t = new THREE.CanvasTexture(source.render(r.a, r.b, r.origin, marks ? { inset, centers: false } : null));
     t.colorSpace = THREE.SRGBColorSpace;
     if (m.shiftable) t.wrapS = THREE.RepeatWrapping;
     t.anisotropy = renderer!.capabilities.getMaxAnisotropy();

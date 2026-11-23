@@ -449,6 +449,8 @@ export function drawOrbifold(
   scale = 1,
   /** Draw everything just inside the polygon (for 3D bodies whose edges are the body's edges). */
   inset = false,
+  /** Draw the symbols of cone points and mirror corners. */
+  centers = true,
 ): void {
   const raw = d.polygon.map(toScreenFn);
   const n = raw.length;
@@ -513,7 +515,7 @@ export function drawOrbifold(
       2,
     );
   });
-  for (const v of d.singular) {
+  for (const v of centers ? d.singular : []) {
     let s = toScreenFn(v.point);
     if (inset) {
       // Into the corner, so that the whole symbol lies on the body.

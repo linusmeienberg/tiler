@@ -549,7 +549,7 @@ export function patternSource(): PatternSource | null {
     t2,
     orbifold: canonicalCache.domain,
     lines: canonicalCache.lines,
-    render(a, b, at, marks, inset) {
+    render(a, b, at, marks) {
       const origin = at ?? { x: t.base.x - (a.x + b.x) / 2, y: t.base.y - (a.y + b.y) / 2 };
       const xs = [0, 1].flatMap((u) => [0, 1].map((v) => origin.x + u * a.x + v * b.x));
       const ys = [0, 1].flatMap((u) => [0, 1].map((v) => origin.y + u * a.y + v * b.y));
@@ -569,7 +569,7 @@ export function patternSource(): PatternSource | null {
           ctx.scale(m.scale, m.scale);
           ctx.drawImage(img, -img.width / 2, -img.height / 2);
         },
-        marks: marks && orbifold ? { domain: orbifold, copies, inset } : undefined,
+        marks: marks && orbifold ? { domain: orbifold, copies, ...marks } : undefined,
       });
     },
   };

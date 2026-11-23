@@ -497,7 +497,7 @@ function analysisSource(): PatternSource | null {
     t2: c.translations.t2,
     orbifold,
     lines: inv ? { mirrors: inv.mirrors, glides: inv.glides, centers: inv.centers, t1: c.translations.t1, t2: c.translations.t2, reference } : null,
-    render: (av, bv, at, marks, inset) =>
+    render: (av, bv, at, marks) =>
       renderCell({
         a: av,
         b: bv,
@@ -506,7 +506,7 @@ function analysisSource(): PatternSource | null {
         domain: domain.polygon,
         copies: c.elements.map((e) => e.g),
         paint: (ctx) => ctx.drawImage(img, 0, 0),
-        marks: marks && orbifold ? { domain: orbifold, copies: c.elements.map((e) => e.g), inset } : undefined,
+        marks: marks && orbifold ? { domain: orbifold, copies: c.elements.map((e) => e.g), ...marks } : undefined,
       }),
   };
 }

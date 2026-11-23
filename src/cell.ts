@@ -22,7 +22,7 @@ export interface CellOptions {
   paint: (ctx: CanvasRenderingContext2D) => void;
   background?: string;
   /** Draw the orbifold marks (edge roles, gluing ticks and arrows, centers) of every copy g(D) over the content. */
-  marks?: { domain: OrbifoldDomain; copies: Isometry[]; inset?: boolean };
+  marks?: { domain: OrbifoldDomain; copies: Isometry[]; inset?: boolean; centers?: boolean };
 }
 
 export function renderCell(o: CellOptions): HTMLCanvasElement {
@@ -78,7 +78,7 @@ export function renderCell(o: CellOptions): HTMLCanvasElement {
     const scale = Math.max(0.5, (perUnit * r) / 130);
     for (const g of o.marks.copies) {
       if (dist(apply(g, c), cellCenter) > r + cellReach) continue;
-      drawOrbifold(ctx, (w) => toCanvas(apply(g, w)), o.marks.domain, scale, o.marks.inset);
+      drawOrbifold(ctx, (w) => toCanvas(apply(g, w)), o.marks.domain, scale, o.marks.inset, o.marks.centers ?? true);
     }
   }
   return canvas;

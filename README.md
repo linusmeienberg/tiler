@@ -111,7 +111,8 @@ Bereichs D (`src/bodies.ts`):
   sowie Zentren mit ihrer Zähligkeit, in der Farbe ihrer Klasse. Sie werden für
   alle Kopien von D in die Textur gezeichnet und passen darum an den Klebestellen
   zusammen. Bei Körpern aus D selbst sitzen sie knapp innerhalb der Kanten.
-  Kegelspitzen und Spiegelecken erscheinen zusätzlich als Kugeln. Alles lässt
+  Auf den Körpern zeigen farbige Kugeln die Kegelspitzen und Spiegelecken (statt
+  der Symbole in der Textur), auf dem Torus die Symbole. Alles lässt
   sich mit einem Schalter ausblenden.
 - **Nicht-orientierbare Fälle:** \*x, xx und 22x lassen sich im Raum nicht
   unverzerrt bauen, für die Kleinsche Flasche und die Kreuzhaube nicht einmal
