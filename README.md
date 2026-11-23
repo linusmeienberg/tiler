@@ -144,8 +144,8 @@ Bereichs D (`src/bodies.ts`):
 ### Malen auf dem Orbifold
 
 Im Orbifold-Modus lässt sich direkt auf den 3D-Körper oder den Torus malen:
-Haken bei »Malen« setzen, dann auf der Fläche ziehen. Zieht man neben dem
-Körper, dreht sich die Ansicht weiterhin.
+**Shift + Ziehen** auf der Fläche malt, Ziehen ohne Shift dreht die Ansicht.
+So wechselt man schnell zwischen Drehen und Stift.
 
 - **Speicherung:** Jeder Strich wird in Musterkoordinaten gespeichert. Über die
   Texturkoordinate des getroffenen Punkts kommt man vom Körper zurück zum

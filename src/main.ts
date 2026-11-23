@@ -653,7 +653,7 @@ function renderOrbifold(): void {
       bodyText(info.kind, info.symbol, source.orbifold !== null) +
       (info.stretch ? ` Die Textur ist meist zwischen ${f(info.stretch[0])} und ${f(info.stretch[1])} gedehnt.` : "");
   }
-  status.textContent = "Ziehen dreht den Torus · Scrollen zoomt · rechte Maustaste verschiebt · F: Ansicht zurücksetzen";
+  status.textContent = "Ziehen dreht · Shift + Ziehen auf dem Körper malt · ⌘Z nimmt einen Strich zurück · Scrollen zoomt · rechte Maustaste verschiebt · F: Ansicht zurücksetzen";
 }
 
 // --- rendering ------------------------------------------------------------------
@@ -1280,13 +1280,12 @@ for (const btn of document.querySelectorAll<HTMLButtonElement>("#orb-view button
 // Painting on the 3D body.
 const brushFromPanel = () => {
   orb?.setBrush({
-    enabled: $<HTMLInputElement>("#orb-paint").checked,
     color: $<HTMLInputElement>("#orb-color").value,
     width: Number($<HTMLInputElement>("#orb-width").value),
   });
   requestRender();
 };
-for (const id of ["#orb-paint", "#orb-color", "#orb-width"]) $(id).addEventListener("input", brushFromPanel);
+for (const id of ["#orb-color", "#orb-width"]) $(id).addEventListener("input", brushFromPanel);
 $("#orb-undo").addEventListener("click", () => {
   orb?.undoStroke();
   requestRender();

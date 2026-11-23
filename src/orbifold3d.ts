@@ -8,7 +8,7 @@
  * (R + r)/R and the inside compressed by (R − r)/R. Which strip of the cell lies
  * outside is an arbitrary choice – a slider shifts it around the tube.
  *
- * Painting: in paint mode, dragging on the body (or torus) paints. The hit's
+ * Painting: Shift + drag on the body (or torus) paints; plain drag rotates. The hit's
  * texture coordinate leads back to a point of the pattern; strokes are kept in
  * pattern coordinates and drawn under every group element, so they continue
  * across mirrors and glued seams. They are cleared when the group changes.
@@ -100,7 +100,7 @@ let strokes: Stroke[] = [];
 let strokesVersion = 0;
 let groupKey = "";
 let currentSource: PatternSource | null = null;
-let brush = { enabled: false, color: "#b91c1c", width: 6 };
+let brush = { color: "#b91c1c", width: 6 };
 /** What a ray can hit, and how its texture maps back to the pattern. */
 let paintTarget: { mesh: THREE.Mesh; texture: THREE.CanvasTexture; a: Point; b: Point; origin: Point } | null = null;
 let onPainted: () => void = () => {};
@@ -112,7 +112,6 @@ export function init(host: HTMLElement, painted: () => void = () => {}): void {
 
 export function setBrush(b: Partial<typeof brush>): void {
   brush = { ...brush, ...b };
-  if (renderer) renderer.domElement.style.cursor = brush.enabled ? "crosshair" : "";
 }
 
 export function strokeCount(): number {
@@ -156,6 +155,13 @@ function ensureRenderer(): void {
   new ResizeObserver(resize).observe(container);
   // Capture phase: decide before the controls whether this drag paints or rotates.
   renderer.domElement.addEventListener("pointerdown", startPainting, { capture: true });
+  // While Shift is held the cursor shows that dragging paints.
+  const cursor = (e: KeyboardEvent) => {
+    if (e.key === "Shift" && renderer) renderer.domElement.style.cursor = e.type === "keydown" ? "crosshair" : "";
+  };
+  window.addEventListener("keydown", cursor);
+  window.addEventListener("keyup", cursor);
+  window.addEventListener("blur", () => renderer && (renderer.domElement.style.cursor = ""));
 }
 
 // --- painting ------------------------------------------------------------------------------
@@ -178,7 +184,7 @@ function patternPointAt(e: PointerEvent): Point | null {
 }
 
 function startPainting(e: PointerEvent): void {
-  if (!brush.enabled || e.button !== 0 || !paintTarget || !currentSource) return;
+  if (!e.shiftKey || e.button !== 0 || !paintTarget || !currentSource) return;
   const p = patternPointAt(e);
   if (!p) return; // off the body: the controls rotate as usual
   e.stopImmediatePropagation();
