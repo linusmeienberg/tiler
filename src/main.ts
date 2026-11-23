@@ -84,7 +84,7 @@ let view: View = { scale: 1, ox: 0, oy: 0 };
 const views: Record<Mode, View | null> = { analyse: null, orbifold: null, generate: null };
 /** Orbifold mode: which pattern it shows, and the torus settings. */
 let orbSource: "analyse" | "generate" = "analyse";
-const torus: TorusSettings = { swap: false, shift: 0 };
+const torus: TorusSettings = { view: "orbifold", swap: false, shift: 0, inflate: 0.35 };
 let size = { width: 0, height: 0, dpr: 1 };
 let pointer: Point | null = null; // screen coordinates
 let spaceDown = false;
@@ -468,6 +468,8 @@ function formatNumber(x: number): string {
 
 // --- orbifold view ------------------------------------------------------------------
 
+let bodyCache: { key: string; domain: OrbifoldDomain | null } = { key: "", domain: null };
+
 /** One lattice cell of the analysed image, rebuilt from the shown domain D (null if not available). */
 function analysisSource(): PatternSource | null {
   const a = analysis();
@@ -477,22 +479,62 @@ function analysisSource(): PatternSource | null {
   const base = scene.base;
   if (!c?.translations || c.copiesPerCell === null || !img || !base || !domain) return null;
   const inv = a.inventory;
+  // The canonical domain for the body, whatever domain is chosen for display.
+  let orbifold: OrbifoldDomain | null = null;
+  if (inv) {
+    const reference = scene.elements[0]?.points[0] ?? base;
+    if (bodyCache.key !== a.key) {
+      const r = canonicalDomain(c, inv, base, reference);
+      bodyCache = { key: a.key, domain: "error" in r ? null : r.domain };
+    }
+    orbifold = bodyCache.domain;
+  }
   return {
     key: a.key + img.src + domainMode,
     label: inv ? `${inv.symbol}${inv.name ? ` (${inv.name})` : ""}` : "eingezeichnete Gruppe",
+    symbol: inv?.symbol ?? "",
     t1: c.translations.t1,
     t2: c.translations.t2,
-    render: (av, bv) =>
+    orbifold,
+    render: (av, bv, at) =>
       renderCell({
         a: av,
         b: bv,
-        origin: { x: base.x - (av.x + bv.x) / 2, y: base.y - (av.y + bv.y) / 2 },
+        origin: at ?? { x: base.x - (av.x + bv.x) / 2, y: base.y - (av.y + bv.y) / 2 },
         ...cellSize(av, bv),
         domain: domain.polygon,
         copies: c.elements.map((e) => e.g),
         paint: (ctx) => ctx.drawImage(img, 0, 0),
       }),
   };
+}
+
+/** What the body is, how it is made, whether it is distorted, and how free its placement is. */
+function bodyText(kind: string | null, symbol: string, hasDomain: boolean): string {
+  const rigid = " Lage: starr – bei Drehzentren oder Spiegeln in mehreren Richtungen lässt die Gruppe keinen Spielraum.";
+  if (!hasDomain) return "Für diese Gruppe ließ sich kein kanonischer Bereich bestimmen.";
+  switch (kind) {
+    case "flat":
+      return "Spiegelvieleck: der Orbifold ist der ausgeschnittene Bereich selbst, sein ganzer Rand ist Spiegel, die Ecken sind Spiegelecken. Unverzerrt." + rigid;
+    case "cylinder":
+      return "Zylinder: die beiden Translationskanten sind zusammengeklebt, die beiden Ränder (blau) sind Spiegel. Unverzerrt. Lage: entlang der Spiegel frei – auf dem Zylinder aber unsichtbar, eine Verschiebung dreht ihn nur.";
+    case "cone":
+      return `Kegel: der Bereich ist um seine Kegelspitze zu einer Tüte gerollt, die beiden Schnittkanten treffen sich; der Rand (blau) ist Spiegel. Unverzerrt.` + rigid;
+    case "pillow":
+      return (
+        (symbol === "22*"
+          ? "Tasche: der Bereich ist entlang der Linie durch die beiden Kegelspitzen gefaltet, oben und unten verklebt, offen entlang des Spiegels (blau)."
+          : "Kissen: der Bereich ist entlang der Linie zwischen den beiden Kegelspitzen gefaltet, die verklebten Kanten liegen aufeinander – ein doppelt belegtes Vieleck mit den Kegelspitzen als Ecken.") +
+        " Flach (Aufblähen 0) ist es exakt; aufgebläht wird die Textur zur Mitte hin leicht gedehnt." +
+        rigid
+      );
+    case "tetrahedron":
+      return "Tetraeder: ein Dreieck aus drei gleichwertigen 2-Zentren, entlang seines Mittendreiecks gefaltet. Seine vier Ecken sind die vier Klassen von 2-Zentren, jede mit Winkelsumme 180°. Unverzerrt." + rigid;
+    default: {
+      const name = symbol === "*x" ? "Möbiusband" : symbol === "xx" ? "Kleinsche Flasche" : symbol === "22x" ? "Kreuzhaube" : "Körper";
+      return `Für ${symbol || "diese Gruppe"} (${name}) folgt die Darstellung noch – bis dahin zeigt »Torus« das Gitter.`;
+    }
+  }
 }
 
 function renderOrbifold(): void {
@@ -510,12 +552,21 @@ function renderOrbifold(): void {
     return;
   }
   const info = orb.update(source, torus);
+  for (const btn of document.querySelectorAll<HTMLButtonElement>("#orb-view button")) {
+    btn.classList.toggle("active", btn.dataset.view === torus.view);
+  }
+  const torusShown = info?.view === "torus";
+  $("#orb-torus-controls").hidden = !torusShown;
+  $("#orb-body-controls").hidden = torusShown;
   $("#orb-shift-value").textContent = `${Math.round(torus.shift * 360)}°`;
-  if (source && info) {
+  $("#orb-inflate-value").textContent = `${Math.round(torus.inflate * 100)} %`;
+  if (!source || !info) return;
+  $("#orb-label").textContent = source.label;
+  const f = (x: number) => `×${x.toFixed(2).replace(".", ",")}`;
+  if (info.view === "torus") {
     const px = (x: number) => `${Math.round(x)} px`;
-    $("#orb-label").textContent = source.label;
-    const f = (x: number) => `×${x.toFixed(2).replace(".", ",")}`;
     $("#orb-info").textContent =
+      (torus.view === "orbifold" ? "Der Orbifold von o ist der Torus selbst. " : "") +
       `Um den großen Kreis läuft ${torus.swap ? "t₂" : "t₁"} (${px(info.bigCircle)}), um die Röhre ${torus.swap ? "t₁" : "t₂"} (${px(info.tube)}). ` +
       `Verzerrung: Rund um das Loch ist die Textur außen ${f(info.stretch)} gedehnt, innen auf ${f(info.squeeze)} gestaucht, ` +
       `in der Mitte der Röhre maßstabsgetreu.` +
@@ -525,6 +576,9 @@ function renderOrbifold(): void {
       (Math.abs(info.angle - 90) > 0.5
         ? ` Außerdem ist sie geschert: t₁ und t₂ stehen im Muster im Winkel ${Math.round(info.angle)}° zueinander, auf dem Torus rechtwinklig.`
         : "");
+  } else {
+    $("#orb-inflate-row").hidden = info.kind !== "pillow";
+    $("#orb-info").textContent = bodyText(info.kind, info.symbol, source.orbifold !== null);
   }
   status.textContent = "Ziehen dreht den Torus · Scrollen zoomt · rechte Maustaste verschiebt · F: Ansicht zurücksetzen";
 }
@@ -1131,6 +1185,16 @@ for (const btn of document.querySelectorAll<HTMLButtonElement>("#orb-source butt
 }
 $<HTMLInputElement>("#orb-shift").addEventListener("input", (e) => {
   torus.shift = Number((e.target as HTMLInputElement).value);
+  requestRender();
+});
+for (const btn of document.querySelectorAll<HTMLButtonElement>("#orb-view button")) {
+  btn.addEventListener("click", () => {
+    torus.view = btn.dataset.view as "torus" | "orbifold";
+    requestRender();
+  });
+}
+$<HTMLInputElement>("#orb-inflate").addEventListener("input", (e) => {
+  torus.inflate = Number((e.target as HTMLInputElement).value);
   requestRender();
 });
 $<HTMLInputElement>("#orb-swap").addEventListener("change", (e) => {

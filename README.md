@@ -85,6 +85,28 @@ nahtlos (`src/cell.ts`, `src/orbifold3d.ts`).
   Wahl, welcher Streifen außen liegt.
 - **Schalter:** Er tauscht, welcher Gittervektor um die Röhre läuft.
 
+Die Ansicht **Orbifold** zeigt den eigentlichen Quotienten aus Ebene und
+Symmetriegruppe als Körper, gebaut durch Rollen oder Falten des kanonischen
+Bereichs D (`src/bodies.ts`):
+
+| Gruppe | Körper |
+|---|---|
+| \*2222, \*442, \*333, \*632 | der ausgeschnittene Bereich selbst (Spiegelvieleck) |
+| \*\* | Zylinder, beide Ränder Spiegel |
+| 4\*2, 3\*3, 2\*22 | Kegeltüte um die Kegelspitze, Rand Spiegel |
+| 442, 632, 333 | Kissen: D gefaltet, doppelt belegtes Dreieck |
+| 22\* | Tasche, offen entlang des Spiegels |
+| 2222 | Tetraeder (Dreieck aus 2-Zentren, entlang des Mittendreiecks gefaltet) |
+| o | der Torus |
+
+- **Verzerrung:** Alle diese Körper sind unverzerrt. Getestet wird, dass jede
+  Strecke ihre Länge behält und verklebte Kanten im Raum aufeinanderliegen.
+  Einzige Ausnahme sind Kissen und Taschen: Der Regler »Aufblähen« macht sie
+  räumlich und dehnt die Textur dabei leicht.
+- **Markierungen:** Kegelspitzen und Spiegelecken erscheinen als Kugeln in der
+  Farbe ihrer Klasse.
+- **Noch offen:** \*x (Möbiusband), xx (Kleinsche Flasche) und 22x (Kreuzhaube).
+
 ## Generierung
 
 - **Gruppe wählen.** Je nach Gittertyp stellt man Zellgröße, Seitenverhältnis

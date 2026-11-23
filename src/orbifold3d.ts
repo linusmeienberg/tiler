@@ -10,21 +10,33 @@
  */
 import * as THREE from "three";
 import { ArcballControls } from "three/examples/jsm/controls/ArcballControls.js";
+import { buildBody, bodyKind, type BodyKind, type BodyMesh } from "./bodies";
+import type { OrbifoldDomain } from "./canonical";
+import { CLASS_COLORS, COLORS } from "./draw";
 import type { Point } from "./isometry";
 
-/** A pattern with a lattice: renders one cell for the basis (a, b). */
+/** A pattern with a lattice: renders the parallelogram origin + [0,1)·a + [0,1)·b (default: a cell around p). */
 export interface PatternSource {
   key: string; // changes when the content changes
   label: string;
+  symbol: string; // Conway symbol
   t1: Point;
   t2: Point;
-  render(a: Point, b: Point): HTMLCanvasElement;
+  /** The canonical domain, for the orbifold body (null if not available). */
+  orbifold: OrbifoldDomain | null;
+  render(a: Point, b: Point, origin?: Point): HTMLCanvasElement;
 }
 
 export interface TorusSettings {
+  view: "torus" | "orbifold";
   swap: boolean; // t₂ around the big circle, t₁ around the tube
   shift: number; // 0…1: texture shift around the tube
+  inflate: number; // 0…1: pillows only
 }
+
+export type ViewInfo =
+  | ({ view: "torus" } & TorusInfo)
+  | { view: "orbifold"; kind: BodyKind | null; symbol: string };
 
 /** Distortion, relative to the middle ring of the tube (true to scale around the big circle). */
 export interface TorusInfo {
@@ -47,6 +59,9 @@ let controls: ArcballControls;
 let mesh: THREE.Mesh | null = null;
 let texture: THREE.CanvasTexture | null = null;
 let shown = { key: "", swap: false };
+let body: THREE.Group | null = null;
+let bodyKey = "";
+let bodyTexture: { key: string; texture: THREE.CanvasTexture } | null = null;
 let running = false;
 let container: HTMLElement;
 
@@ -110,14 +125,20 @@ export function setActive(on: boolean): void {
   if (!on) running = false;
 }
 
-/** Show the torus of `source` (null: nothing). Returns the distortion info. */
-export function update(source: PatternSource | null, settings: TorusSettings): TorusInfo | null {
+/** Show the torus or the orbifold body of `source` (null: nothing). */
+export function update(source: PatternSource | null, settings: TorusSettings): ViewInfo | null {
   ensureRenderer();
-  if (!source) {
-    if (mesh) mesh.visible = false;
-    shown = { key: "", swap: false };
-    return null;
+  if (mesh) mesh.visible = false;
+  if (body) body.visible = false;
+  if (!source) return null;
+  // The orbifold of o is the torus itself.
+  if (settings.view === "orbifold" && source.symbol !== "o") {
+    return { view: "orbifold", kind: showBody(source, settings), symbol: source.symbol };
   }
+  return { view: "torus", ...showTorus(source, settings) };
+}
+
+function showTorus(source: PatternSource, settings: TorusSettings): TorusInfo {
   const [a, b] = settings.swap ? [source.t2, source.t1] : [source.t1, source.t2];
   const la = Math.hypot(a.x, a.y);
   const lb = Math.hypot(b.x, b.y);
@@ -156,4 +177,88 @@ export function update(source: PatternSource | null, settings: TorusSettings): T
   texture!.offset.set(0, settings.shift);
   const angle = (Math.acos(Math.abs(a.x * b.x + a.y * b.y) / (la * lb)) * 180) / Math.PI;
   return { bigCircle: la, tube: lb, stretch: (R + r) / R, squeeze: (R - r) / R, tubeFactor, angle };
+}
+
+// --- orbifold bodies -----------------------------------------------------------------------
+
+function showBody(source: PatternSource, settings: TorusSettings): BodyKind | null {
+  const kind = bodyKind(source.symbol);
+  if (!kind || !source.orbifold) return null;
+  const inflate = kind === "pillow" ? settings.inflate : 0;
+  const key = JSON.stringify([source.key, source.symbol, inflate]);
+  if (key !== bodyKey || !body) {
+    const m = buildBody(source.symbol, source.orbifold, { inflate, lattice: { t1: source.t1, t2: source.t2 } });
+    if (!m) return null;
+    replaceBody(makeBody(m, textureFor(source, m)));
+    bodyKey = key;
+  }
+  body!.visible = true;
+  return kind;
+}
+
+/** The texture is the world rectangle `region` around D; reused while only the inflation changes. */
+function textureFor(source: PatternSource, m: BodyMesh): THREE.CanvasTexture {
+  const r = m.region;
+  const key = JSON.stringify([source.key, r]);
+  if (bodyTexture?.key !== key) {
+    bodyTexture?.texture.dispose();
+    const t = new THREE.CanvasTexture(source.render({ x: r.w, y: 0 }, { x: 0, y: r.h }, { x: r.x0, y: r.y0 }));
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = renderer!.capabilities.getMaxAnisotropy();
+    bodyTexture = { key, texture: t };
+  }
+  return bodyTexture.texture;
+}
+
+function makeBody(m: BodyMesh, map: THREE.Texture): THREE.Group {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(m.positions, 3));
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(m.uvs, 2));
+  geometry.setIndex(m.indices);
+  geometry.computeVertexNormals();
+  // Closed bodies (pillows, tetrahedron) only from outside – the two layers of a
+  // flat pillow lie in the same plane; open sheets from both sides.
+  const closed = m.kind === "pillow" || m.kind === "tetrahedron";
+  const material = new THREE.MeshStandardMaterial({
+    map,
+    roughness: 0.85,
+    side: closed ? THREE.FrontSide : THREE.DoubleSide,
+    flatShading: m.kind === "tetrahedron",
+  });
+  const group = new THREE.Group();
+  group.add(new THREE.Mesh(geometry, material));
+
+  geometry.computeBoundingSphere();
+  const radius = geometry.boundingSphere!.radius || 1;
+  // Mirror boundary as thin tubes (WebGL lines are always 1 px wide).
+  const mirrorMaterial = new THREE.MeshStandardMaterial({ color: COLORS.mirror, roughness: 0.4 });
+  for (const line of m.mirrors) {
+    const curve = new THREE.CatmullRomCurve3(line.map(([x, y, z]) => new THREE.Vector3(x, y, z)));
+    group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 64, radius * 0.008, 8), mirrorMaterial));
+  }
+  for (const k of m.markers) {
+    const ball = new THREE.Mesh(
+      new THREE.SphereGeometry(radius * 0.035, 16, 12),
+      new THREE.MeshStandardMaterial({ color: CLASS_COLORS[k.classIndex % CLASS_COLORS.length], roughness: 0.5 }),
+    );
+    ball.position.set(...k.pos);
+    group.add(ball);
+  }
+  group.scale.setScalar(1 / radius);
+  return group;
+}
+
+function replaceBody(group: THREE.Group): void {
+  if (body) {
+    scene.remove(body);
+    body.traverse((o) => {
+      if (o instanceof THREE.Mesh || o instanceof THREE.Line) {
+        o.geometry.dispose();
+        const mat = o.material as THREE.Material & { map?: THREE.Texture };
+        mat.dispose(); // the texture is kept in bodyTexture
+      }
+    });
+  }
+  body = group;
+  scene.add(body);
 }

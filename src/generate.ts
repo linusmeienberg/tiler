@@ -7,6 +7,7 @@
  */
 import { renderCell, cellSize } from "./cell";
 import { CLASS_COLORS, drawOrbifold, haloStroke, label } from "./draw";
+import type { OrbifoldDomain } from "./canonical";
 import type { PatternSource } from "./orbifold3d";
 import { DEFAULT_PARAMS, findGroup, GROUPS, realize, type LatticeParams, type Realization } from "./groups";
 import { apply, inverse, type Isometry, type Point } from "./isometry";
@@ -519,6 +520,8 @@ export function tilingSvg(t: Tiling, view: View, width: number, height: number):
 
 // --- for the orbifold view ------------------------------------------------------------
 
+let canonicalCache: { key: string; domain: OrbifoldDomain | null } = { key: "", domain: null };
+
 /** One lattice cell of the current tiling, for the 3D view (null without motif). */
 export function patternSource(): PatternSource | null {
   const t = tiling();
@@ -527,13 +530,19 @@ export function patternSource(): PatternSource | null {
   if (!t || !m || !img) return null;
   const { t1, t2 } = t.translations;
   const label = settings.custom?.label ?? `${findGroup(settings.group).conway} (${findGroup(settings.group).iuc})`;
+  const key = JSON.stringify([cache.key, m, img.width, img.height, settings.domainMode]);
+  if (canonicalCache.key !== cache.key) {
+    canonicalCache = { key: cache.key, domain: buildTiling(realization(), settings.base, "orbifold")?.orbifold ?? null };
+  }
   return {
-    key: JSON.stringify([cache.key, m, img.width, img.height, settings.domainMode]),
+    key,
     label,
+    symbol: label.split(" ")[0],
     t1,
     t2,
-    render(a, b) {
-      const origin = { x: t.base.x - (a.x + b.x) / 2, y: t.base.y - (a.y + b.y) / 2 };
+    orbifold: canonicalCache.domain,
+    render(a, b, at) {
+      const origin = at ?? { x: t.base.x - (a.x + b.x) / 2, y: t.base.y - (a.y + b.y) / 2 };
       const xs = [0, 1].flatMap((u) => [0, 1].map((v) => origin.x + u * a.x + v * b.x));
       const ys = [0, 1].flatMap((u) => [0, 1].map((v) => origin.y + u * a.y + v * b.y));
       const copies = visibleCopies(t, { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) }, 20000) ?? [];

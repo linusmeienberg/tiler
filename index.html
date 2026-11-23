@@ -34,15 +34,23 @@
           </p>
           <div id="orb-torus">
             <p id="orb-label" class="orb-label"></p>
-            <h2>Torus</h2>
-            <p class="info">
-              Der Torus ist die Ebene, in der Punkte gleich gelten, die sich um eine Gitterverschiebung unterscheiden:
-              eine Gitterzelle, rechts hinaus = links herein, oben hinaus = unten herein. Flach ist er im Raum nicht
-              baubar – der Donut dehnt die Textur außen und staucht sie innen.
-            </p>
-            <label class="slider">Verschiebung entlang der Röhre <span id="orb-shift-value"></span><input type="range" id="orb-shift" min="0" max="1" step="0.002" value="0" /></label>
-            <label class="row"><input type="checkbox" id="orb-swap" /> t₁ und t₂ tauschen (welche Richtung um die Röhre läuft)</label>
+            <div class="segmented" id="orb-view">
+              <button data-view="orbifold">Orbifold</button><button data-view="torus">Torus (Gitter)</button>
+            </div>
+            <div id="orb-torus-controls">
+              <p class="info">
+                Der Torus ist die Ebene, in der Punkte gleich gelten, die sich um eine Gitterverschiebung unterscheiden:
+                eine Gitterzelle, rechts hinaus = links herein, oben hinaus = unten herein. Flach ist er im Raum nicht
+                baubar – der Donut dehnt die Textur außen und staucht sie innen.
+              </p>
+              <label class="slider">Verschiebung entlang der Röhre <span id="orb-shift-value"></span><input type="range" id="orb-shift" min="0" max="1" step="0.002" value="0" /></label>
+              <label class="row"><input type="checkbox" id="orb-swap" /> t₁ und t₂ tauschen (welche Richtung um die Röhre läuft)</label>
+            </div>
+            <div id="orb-body-controls">
+              <label class="slider" id="orb-inflate-row">Aufblähen <span id="orb-inflate-value"></span><input type="range" id="orb-inflate" min="0" max="1" step="0.01" value="0.35" /></label>
+            </div>
             <p id="orb-info" class="info"></p>
+            <p class="info">Kugeln: Kegelspitzen und Spiegelecken in der Farbe ihrer Klasse · blau: Spiegelrand.</p>
           </div>
         </div>
 
