@@ -10,7 +10,7 @@
  */
 import * as THREE from "three";
 import { ArcballControls } from "three/examples/jsm/controls/ArcballControls.js";
-import { buildBody, bodyKind, type BodyKind, type BodyMesh } from "./bodies";
+import { buildBody, bodyKind, type BodyKind, type BodyMesh, type GroupLines } from "./bodies";
 import type { OrbifoldDomain } from "./canonical";
 import { CLASS_COLORS, COLORS } from "./draw";
 import type { Point } from "./isometry";
@@ -24,6 +24,8 @@ export interface PatternSource {
   t2: Point;
   /** The canonical domain, for the orbifold body (null if not available). */
   orbifold: OrbifoldDomain | null;
+  /** Mirrors, glide axes, centers and the reference point – for *x, xx, 22x. */
+  lines: GroupLines | null;
   render(a: Point, b: Point, origin?: Point): HTMLCanvasElement;
 }
 
@@ -32,11 +34,12 @@ export interface TorusSettings {
   swap: boolean; // t₂ around the big circle, t₁ around the tube
   shift: number; // 0…1: texture shift around the tube
   inflate: number; // 0…1: pillows only
+  slide: number; // 0…1: shift along mirrors / glide axes (Möbius band, Klein bottle)
 }
 
 export type ViewInfo =
   | ({ view: "torus" } & TorusInfo)
-  | { view: "orbifold"; kind: BodyKind | null; symbol: string };
+  | { view: "orbifold"; kind: BodyKind | null; symbol: string; stretch?: [number, number]; shiftable?: boolean };
 
 /** Distortion, relative to the middle ring of the tube (true to scale around the big circle). */
 export interface TorusInfo {
@@ -133,7 +136,8 @@ export function update(source: PatternSource | null, settings: TorusSettings): V
   if (!source) return null;
   // The orbifold of o is the torus itself.
   if (settings.view === "orbifold" && source.symbol !== "o") {
-    return { view: "orbifold", kind: showBody(source, settings), symbol: source.symbol };
+    const m = showBody(source, settings);
+    return { view: "orbifold", kind: m?.kind ?? null, symbol: source.symbol, stretch: m?.stretch, shiftable: m?.shiftable };
   }
   return { view: "torus", ...showTorus(source, settings) };
 }
@@ -181,19 +185,28 @@ function showTorus(source: PatternSource, settings: TorusSettings): TorusInfo {
 
 // --- orbifold bodies -----------------------------------------------------------------------
 
-function showBody(source: PatternSource, settings: TorusSettings): BodyKind | null {
+let bodyMesh: BodyMesh | null = null;
+
+function showBody(source: PatternSource, settings: TorusSettings): BodyMesh | null {
   const kind = bodyKind(source.symbol);
   if (!kind || !source.orbifold) return null;
   const inflate = kind === "pillow" ? settings.inflate : 0;
   const key = JSON.stringify([source.key, source.symbol, inflate]);
   if (key !== bodyKey || !body) {
-    const m = buildBody(source.symbol, source.orbifold, { inflate, lattice: { t1: source.t1, t2: source.t2 } });
+    const m = buildBody(source.symbol, source.orbifold, {
+      inflate,
+      lattice: { t1: source.t1, t2: source.t2 },
+      lines: source.lines ?? undefined,
+    });
     if (!m) return null;
     replaceBody(makeBody(m, textureFor(source, m)));
     bodyKey = key;
+    bodyMesh = m;
   }
+  // Sliding along mirrors / glide axes only moves the texture (it spans a whole period).
+  if (bodyMesh?.shiftable && bodyTexture) bodyTexture.texture.offset.set(settings.slide, 0);
   body!.visible = true;
-  return kind;
+  return bodyMesh;
 }
 
 /** The texture is the world rectangle `region` around D; reused while only the inflation changes. */
@@ -202,8 +215,9 @@ function textureFor(source: PatternSource, m: BodyMesh): THREE.CanvasTexture {
   const key = JSON.stringify([source.key, r]);
   if (bodyTexture?.key !== key) {
     bodyTexture?.texture.dispose();
-    const t = new THREE.CanvasTexture(source.render({ x: r.w, y: 0 }, { x: 0, y: r.h }, { x: r.x0, y: r.y0 }));
+    const t = new THREE.CanvasTexture(source.render(r.a, r.b, r.origin));
     t.colorSpace = THREE.SRGBColorSpace;
+    if (m.shiftable) t.wrapS = THREE.RepeatWrapping;
     t.anisotropy = renderer!.capabilities.getMaxAnisotropy();
     bodyTexture = { key, texture: t };
   }

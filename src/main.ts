@@ -84,7 +84,7 @@ let view: View = { scale: 1, ox: 0, oy: 0 };
 const views: Record<Mode, View | null> = { analyse: null, orbifold: null, generate: null };
 /** Orbifold mode: which pattern it shows, and the torus settings. */
 let orbSource: "analyse" | "generate" = "analyse";
-const torus: TorusSettings = { view: "orbifold", swap: false, shift: 0, inflate: 0.35 };
+const torus: TorusSettings = { view: "orbifold", swap: false, shift: 0, inflate: 0.35, slide: 0 };
 let size = { width: 0, height: 0, dpr: 1 };
 let pointer: Point | null = null; // screen coordinates
 let spaceDown = false;
@@ -481,8 +481,8 @@ function analysisSource(): PatternSource | null {
   const inv = a.inventory;
   // The canonical domain for the body, whatever domain is chosen for display.
   let orbifold: OrbifoldDomain | null = null;
+  const reference = scene.elements[0]?.points[0] ?? base;
   if (inv) {
-    const reference = scene.elements[0]?.points[0] ?? base;
     if (bodyCache.key !== a.key) {
       const r = canonicalDomain(c, inv, base, reference);
       bodyCache = { key: a.key, domain: "error" in r ? null : r.domain };
@@ -496,6 +496,7 @@ function analysisSource(): PatternSource | null {
     t1: c.translations.t1,
     t2: c.translations.t2,
     orbifold,
+    lines: inv ? { mirrors: inv.mirrors, glides: inv.glides, centers: inv.centers, t1: c.translations.t1, t2: c.translations.t2, reference } : null,
     render: (av, bv, at) =>
       renderCell({
         a: av,
@@ -528,6 +529,12 @@ function bodyText(kind: string | null, symbol: string, hasDomain: boolean): stri
         " Flach (Aufblähen 0) ist es exakt; aufgebläht wird die Textur zur Mitte hin leicht gedehnt." +
         rigid
       );
+    case "moebius":
+      return "Möbiusband: der Streifen zwischen zwei benachbarten Spiegeln, eine halbe Periode lang; die Gleitspiegelung an der Mittellinie klebt die Enden verdreht aneinander. Beide Spiegel bilden zusammen den einen Rand (blau). Im Raum nur verzerrt baubar. Lage: entlang der Spiegel frei – der Regler verschiebt die Textur.";
+    case "klein":
+      return "Kleinsche Flasche (Achterform): von einer Gleitachse bis zur übernächsten, eine halbe Periode lang; die Längsseiten sind gerade verklebt, die Enden gespiegelt. Im Raum nur mit Selbstdurchdringung und Verzerrung darstellbar. Lage: entlang der Gleitachsen frei – der Regler verschiebt die Textur.";
+    case "crosscap":
+      return "Kreuzhaube (projektive Ebene): ein Rechteck mit vier 2-Zentren als Ecken, jeder Randpunkt mit dem gegenüberliegenden verklebt; die Ecken werden paarweise zu den zwei Kegelspitzen. Im Raum nur mit Selbstdurchdringung (die Linie unten) und starker Verzerrung darstellbar." + rigid;
     case "tetrahedron":
       return "Tetraeder: ein Dreieck aus drei gleichwertigen 2-Zentren, entlang seines Mittendreiecks gefaltet. Seine vier Ecken sind die vier Klassen von 2-Zentren, jede mit Winkelsumme 180°. Unverzerrt." + rigid;
     default: {
@@ -578,7 +585,11 @@ function renderOrbifold(): void {
         : "");
   } else {
     $("#orb-inflate-row").hidden = info.kind !== "pillow";
-    $("#orb-info").textContent = bodyText(info.kind, info.symbol, source.orbifold !== null);
+    $("#orb-slide-row").hidden = !info.shiftable;
+    $("#orb-slide-value").textContent = `${Math.round(torus.slide * 100)} %`;
+    $("#orb-info").textContent =
+      bodyText(info.kind, info.symbol, source.orbifold !== null) +
+      (info.stretch ? ` Die Textur ist meist zwischen ${f(info.stretch[0])} und ${f(info.stretch[1])} gedehnt.` : "");
   }
   status.textContent = "Ziehen dreht den Torus · Scrollen zoomt · rechte Maustaste verschiebt · F: Ansicht zurücksetzen";
 }
@@ -1193,6 +1204,10 @@ for (const btn of document.querySelectorAll<HTMLButtonElement>("#orb-view button
     requestRender();
   });
 }
+$<HTMLInputElement>("#orb-slide").addEventListener("input", (e) => {
+  torus.slide = Number((e.target as HTMLInputElement).value);
+  requestRender();
+});
 $<HTMLInputElement>("#orb-inflate").addEventListener("input", (e) => {
   torus.inflate = Number((e.target as HTMLInputElement).value);
   requestRender();

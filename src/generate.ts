@@ -7,6 +7,7 @@
  */
 import { renderCell, cellSize } from "./cell";
 import { CLASS_COLORS, drawOrbifold, haloStroke, label } from "./draw";
+import type { GroupLines } from "./bodies";
 import type { OrbifoldDomain } from "./canonical";
 import type { PatternSource } from "./orbifold3d";
 import { DEFAULT_PARAMS, findGroup, GROUPS, realize, type LatticeParams, type Realization } from "./groups";
@@ -520,7 +521,7 @@ export function tilingSvg(t: Tiling, view: View, width: number, height: number):
 
 // --- for the orbifold view ------------------------------------------------------------
 
-let canonicalCache: { key: string; domain: OrbifoldDomain | null } = { key: "", domain: null };
+let canonicalCache: { key: string; domain: OrbifoldDomain | null; lines: GroupLines | null } = { key: "", domain: null, lines: null };
 
 /** One lattice cell of the current tiling, for the 3D view (null without motif). */
 export function patternSource(): PatternSource | null {
@@ -532,7 +533,13 @@ export function patternSource(): PatternSource | null {
   const label = settings.custom?.label ?? `${findGroup(settings.group).conway} (${findGroup(settings.group).iuc})`;
   const key = JSON.stringify([cache.key, m, img.width, img.height, settings.domainMode]);
   if (canonicalCache.key !== cache.key) {
-    canonicalCache = { key: cache.key, domain: buildTiling(realization(), settings.base, "orbifold")?.orbifold ?? null };
+    const ct = buildTiling(realization(), settings.base, "orbifold");
+    const inv = ct?.inventory;
+    canonicalCache = {
+      key: cache.key,
+      domain: ct?.orbifold ?? null,
+      lines: inv ? { mirrors: inv.mirrors, glides: inv.glides, centers: inv.centers, t1, t2, reference: { x: 0, y: 0 } } : null,
+    };
   }
   return {
     key,
@@ -541,6 +548,7 @@ export function patternSource(): PatternSource | null {
     t1,
     t2,
     orbifold: canonicalCache.domain,
+    lines: canonicalCache.lines,
     render(a, b, at) {
       const origin = at ?? { x: t.base.x - (a.x + b.x) / 2, y: t.base.y - (a.y + b.y) / 2 };
       const xs = [0, 1].flatMap((u) => [0, 1].map((v) => origin.x + u * a.x + v * b.x));

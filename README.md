@@ -98,6 +98,9 @@ Bereichs D (`src/bodies.ts`):
 | 22\* | Tasche, offen entlang des Spiegels |
 | 2222 | Tetraeder (Dreieck aus 2-Zentren, entlang des Mittendreiecks gefaltet) |
 | o | der Torus |
+| \*x | Möbiusband, Rand Spiegel |
+| xx | Kleinsche Flasche (Achterform) |
+| 22x | Kreuzhaube (projektive Ebene) mit den zwei Kegelspitzen auf der Durchdringungslinie |
 
 - **Verzerrung:** Alle diese Körper sind unverzerrt. Getestet wird, dass jede
   Strecke ihre Länge behält und verklebte Kanten im Raum aufeinanderliegen.
@@ -105,7 +108,18 @@ Bereichs D (`src/bodies.ts`):
   räumlich und dehnt die Textur dabei leicht.
 - **Markierungen:** Kegelspitzen und Spiegelecken erscheinen als Kugeln in der
   Farbe ihrer Klasse.
-- **Noch offen:** \*x (Möbiusband), xx (Kleinsche Flasche) und 22x (Kreuzhaube).
+- **Nicht-orientierbare Fälle:** \*x, xx und 22x lassen sich im Raum nicht
+  unverzerrt bauen, für die Kleinsche Flasche und die Kreuzhaube nicht einmal
+  ohne Selbstdurchdringung.
+  - Dargestellt werden sie mit Standard-Immersionen eines Rechtecks aus dem
+    Muster. Das Rechteck ist so geschnitten, dass seine Kanten genau so
+    verklebt sind, wie die Immersion es verlangt.
+  - Getestet wird, dass es ein Fundamentalbereich ist und dass Randpunkte, die
+    die Gruppe identifiziert, auf denselben Punkt des Körpers fallen.
+  - Die Ansicht gibt den typischen Dehnungsbereich an.
+  - Bei Möbiusband und Kleinscher Flasche verschiebt ein Regler die Textur
+    entlang der Spiegel bzw. Gleitachsen. Das ist der einzige stetige
+    Freiheitsgrad, den diese Gruppen lassen.
 
 ## Generierung
 

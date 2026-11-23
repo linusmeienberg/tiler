@@ -3,6 +3,7 @@ import { buildBody, bodyKind } from "../src/bodies";
 import { canonicalDomain } from "../src/canonical";
 import { construct } from "../src/construction";
 import { findGroup, GROUPS, realize } from "../src/groups";
+import { apply, inverse } from "../src/isometry";
 import { inventory } from "../src/inventory";
 
 const params = { size: 100, ratio: 1.3, angleDeg: 74 };
@@ -13,16 +14,66 @@ function setup(conway: string) {
   const inv = inventory(c, p)!;
   const r = canonicalDomain(c, inv, p, { x: 0, y: 0 });
   if ("error" in r) throw new Error(r.error);
-  return { c, d: r.domain };
+  const { t1, t2 } = c.translations!;
+  const lines = { mirrors: inv.mirrors, glides: inv.glides, centers: inv.centers, t1, t2, reference: { x: 0, y: 0 } };
+  return { c, d: r.domain, lines };
 }
 
 const len3 = (a: number[], b: number[]) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 
-const BUILT = GROUPS.map((g) => g.conway).filter((s) => bodyKind(s) !== null);
+const ALL = GROUPS.map((g) => g.conway).filter((s) => bodyKind(s) !== null);
+const IMMERSED = ["*x", "xx", "22x"];
+const BUILT = ALL.filter((s) => !IMMERSED.includes(s)); // the exact (isometric) bodies
 
 describe("orbifold bodies", () => {
-  it("covers the exact cases", () => {
+  it("covers every group but o (whose orbifold is the torus)", () => {
+    expect(ALL.length).toBe(16);
     expect(BUILT.sort()).toEqual(["*2222", "*333", "*442", "*632", "**", "2*22", "2222", "22*", "3*3", "333", "4*2", "442", "632"].sort());
+  });
+
+  it.each(IMMERSED.map((s) => [s] as const))("%s: the parameter rectangle is a fundamental domain, glued as the immersion requires", (symbol) => {
+    const { c, d, lines } = setup(symbol);
+    const body = buildBody(symbol, d, { lines })!;
+    expect(body).not.toBeNull();
+    // The rectangle: origin + ξ·A + η·B with A = a / 2 for the shiftable ones (texture spans a whole period).
+    const { origin } = body.region;
+    const A = body.shiftable ? { x: body.region.a.x / 2, y: body.region.a.y / 2 } : body.region.a;
+    const B = body.region.b;
+    const det = A.x * B.y - A.y * B.x;
+    const { t1, t2 } = c.translations!;
+    expect(Math.abs(det)).toBeCloseTo(Math.abs(t1.x * t2.y - t1.y * t2.x) / c.copiesPerCell!, 6);
+    const local = (w: { x: number; y: number }) => {
+      const q = { x: w.x - origin.x, y: w.y - origin.y };
+      return { xi: (q.x * B.y - q.y * B.x) / det, eta: (A.x * q.y - A.y * q.x) / det };
+    };
+    const at = (xi: number, eta: number) => ({ x: origin.x + xi * A.x + eta * B.x, y: origin.y + xi * A.y + eta * B.y });
+    // Tiles: random points lie in exactly one copy g(R).
+    let seed = 9;
+    const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    for (let k = 0; k < 40; k++) {
+      const q = at(rand() * 3 - 1, rand() * 3 - 1);
+      const hits = c.elements.filter((e) => {
+        const l = local(apply(inverse(e.g), q));
+        return l.xi > 1e-9 && l.xi < 1 - 1e-9 && l.eta > 1e-9 && l.eta < 1 - 1e-9;
+      });
+      expect(hits).toHaveLength(1);
+    }
+    // Boundary points identified by the group land on the same point of the body.
+    const onBoundary = (l: { xi: number; eta: number }) =>
+      l.xi > -1e-9 && l.xi < 1 + 1e-9 && l.eta > -1e-9 && l.eta < 1 + 1e-9 &&
+      (Math.abs(l.xi) < 1e-9 || Math.abs(l.xi - 1) < 1e-9 || Math.abs(l.eta) < 1e-9 || Math.abs(l.eta - 1) < 1e-9);
+    let identified = 0;
+    for (const t of [0.1, 0.37, 0.5, 0.81]) {
+      for (const q of [at(t, 0), at(t, 1), at(0, t), at(1, t)]) {
+        for (const e of c.elements) {
+          const w = apply(e.g, q);
+          if (Math.hypot(w.x - q.x, w.y - q.y) < 1e-6 || !onBoundary(local(w))) continue;
+          expect(len3(body.place!(q), body.place!(w))).toBeLessThan(1e-6);
+          identified++;
+        }
+      }
+    }
+    expect(identified).toBeGreaterThanOrEqual(8); // Möbius band: only the cut edges (mirror points map to themselves)
   });
 
   // Rolled bodies are curved: mesh edges are chords there, so check the map locally instead.

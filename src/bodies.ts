@@ -12,27 +12,62 @@
  *   folded along its medial triangle.
  *
  * All of these are isometric (the texture is not distorted), except for the
- * inflation of pillows. Coordinates: "display" = (x, −y) of the image, so that
+ * inflation of pillows. The non-orientable ones cannot be built undistorted (or
+ * at all without self-intersection) and use standard immersions of a
+ * parameter rectangle cut from the pattern so that its edges are glued as the
+ * immersion requires:
+ *
+ * - *x : the strip between two neighbouring mirrors, half a period long – its
+ *   cut edges are glued flipped by the glide on the midline: a Möbius band.
+ * - xx : from one glide axis to the next but one, half a period long – long
+ *   edges glued straight (translation), cut edges flipped: a Klein bottle
+ *   (figure-8 immersion).
+ * - 22x: the rectangle with four 2-fold centers as corners along the two glide
+ *   directions – every boundary point is glued to the opposite one (point
+ *   reflection in the center): a disk with antipodal boundary, i.e. the
+ *   projective plane, shown as a cross-cap. Coordinates: "display" = (x, −y) of the image, so that
  * the pattern keeps its orientation when seen from outside.
  */
 import type { OrbifoldDomain } from "./canonical";
+import type { Line } from "./inventory";
 import type { Point } from "./isometry";
 
-export type BodyKind = "flat" | "cylinder" | "cone" | "pillow" | "tetrahedron";
+export type BodyKind = "flat" | "cylinder" | "cone" | "pillow" | "tetrahedron" | "moebius" | "klein" | "crosscap";
+
+/** A parallelogram of the pattern: origin + [0,1]·a + [0,1]·b (texture: a to the right, b up). */
+export interface Region {
+  origin: Point;
+  a: Point;
+  b: Point;
+}
 export type Vec3 = [number, number, number];
 
 export interface BodyMesh {
   kind: BodyKind;
   positions: number[]; // xyz per vertex
-  uvs: number[]; // uv per vertex (texture: the world rectangle `region`, v up)
+  uvs: number[]; // uv per vertex in the texture of `region` (v up)
   indices: number[];
   /** Planar (world) coordinates per vertex – for tests and distortion checks. */
   planar: Point[];
-  region: { x0: number; y0: number; w: number; h: number };
+  region: Region;
+  /** The texture covers a whole period along a; a slider may shift it (offset.x, wrapping). */
+  shiftable?: boolean;
+  /** Typical stretch of the texture (5th and 95th percentile), for distorted bodies. */
+  stretch?: [number, number];
   markers: { pos: Vec3; order: number; classIndex: number; corner: boolean }[];
   mirrors: Vec3[][]; // polylines along mirror edges
   /** Where a point of D (world coordinates) ends up on the body (not for the tetrahedron). */
   place?: (w: Point) => Vec3;
+}
+
+/** Symmetry elements and lattice, for the bodies cut from the pattern rather than from D. */
+export interface GroupLines {
+  mirrors: Line[];
+  glides: Line[];
+  centers: { point: Point; order: number; classIndex: number }[];
+  t1: Point;
+  t2: Point;
+  reference: Point;
 }
 
 export interface BodyOptions {
@@ -40,6 +75,8 @@ export interface BodyOptions {
   detail?: number; // subdivisions per fan triangle
   /** Needed for 2222 (the tetrahedron is cut from the lattice, not from D). */
   lattice?: { t1: Point; t2: Point };
+  /** Needed for *x, xx, 22x. */
+  lines?: GroupLines;
 }
 
 /** Which body a symbol gets (null: not built yet). */
@@ -49,6 +86,9 @@ export function bodyKind(symbol: string): BodyKind | null {
   if (["4*2", "3*3", "2*22"].includes(symbol)) return "cone";
   if (["442", "632", "333", "22*"].includes(symbol)) return "pillow";
   if (symbol === "2222") return "tetrahedron";
+  if (symbol === "*x") return "moebius";
+  if (symbol === "xx") return "klein";
+  if (symbol === "22x") return "crosscap";
   return null;
 }
 
@@ -57,6 +97,7 @@ export function buildBody(symbol: string, d: OrbifoldDomain, opts: BodyOptions =
   if (!kind) return null;
   const detail = opts.detail ?? 16;
   if (kind === "tetrahedron") return opts.lattice ? tetrahedron(d, opts.lattice) : null;
+  if (kind === "moebius" || kind === "klein" || kind === "crosscap") return opts.lines ? immersion(kind, opts.lines) : null;
 
   // Work in display coordinates, counter-clockwise.
   let poly = d.polygon.map(disp);
@@ -174,7 +215,7 @@ export function buildBody(symbol: string, d: OrbifoldDomain, opts: BodyOptions =
   });
 
   const world = verts.map(undisp);
-  const region = bbox(d.polygon);
+  const region = boxRegion(d.polygon);
   const mesh: BodyMesh = {
     kind,
     positions: verts.flatMap(map),
@@ -233,7 +274,7 @@ function tetrahedron(d: OrbifoldDomain, lattice: { t1: Point; t2: Point }): Body
     [[N2, W], [M02, V02], [M12, V12]],
   ];
   const netWorld = [N0, N1, N2].map(undisp);
-  const region = bbox(netWorld);
+  const region = boxRegion(netWorld);
   const planar = faces.flatMap((f) => f.map(([q]) => undisp(q)));
   // Classes of the four vertices: match against D's singular points modulo the lattice.
   const classOf = (q: Point) => {
@@ -299,8 +340,15 @@ function center(m: BodyMesh): BodyMesh {
   };
 }
 
-function uv(w: Point, r: { x0: number; y0: number; w: number; h: number }): [number, number] {
-  return [(w.x - r.x0) / r.w, 1 - (w.y - r.y0) / r.h];
+function uv(w: Point, r: Region): [number, number] {
+  const det = cross(r.a, r.b);
+  const q = sub(w, r.origin);
+  return [cross(q, r.b) / det, 1 - cross(r.a, q) / det];
+}
+
+function boxRegion(ps: Point[]): Region {
+  const b = bbox(ps);
+  return { origin: { x: b.x0, y: b.y0 }, a: { x: b.w, y: 0 }, b: { x: 0, y: b.h } };
 }
 
 function bbox(ps: Point[]): { x0: number; y0: number; w: number; h: number } {
@@ -384,3 +432,160 @@ const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 const sub3 = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const dot3 = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const cross3 = (a: Vec3, b: Vec3): Vec3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+
+// --- *x, xx, 22x: immersions of a parameter rectangle ------------------------------------------
+
+function immersion(kind: "moebius" | "klein" | "crosscap", g: GroupLines): BodyMesh | null {
+  let origin: Point;
+  let A: Point; // along ξ
+  let B: Point; // along η
+  let map: (xi: number, eta: number) => Vec3;
+  let fullPeriod = false;
+  const markers: BodyMesh["markers"] = [];
+  const mirrors: Vec3[][] = [];
+
+  if (kind === "moebius" || kind === "klein") {
+    const lines = kind === "moebius" ? g.mirrors : g.glides;
+    if (lines.length === 0) return null;
+    const u = unit(lines[0].u);
+    const n = { x: -u.y, y: u.x };
+    const T = norm(shortestAlong(u, g.t1, g.t2));
+    const offsets = [...new Set(lines.filter((l) => Math.abs(cross(l.u, u)) < 1e-9).map((l) => Math.round(dot(l.a, n) * 1e6) / 1e6))].sort((x, y) => x - y);
+    const r = dot(g.reference, n);
+    const k = Math.max(0, offsets.findIndex((o, i) => o <= r + 1e-9 && (offsets[i + 1] ?? Infinity) > r + 1e-9));
+    const lower = offsets[k];
+    const step = kind === "moebius" ? 1 : 2; // Klein: to the next but one glide axis
+    const upper = offsets[k + step];
+    if (upper === undefined) return null;
+    const W = upper - lower;
+    const s0 = dot(g.reference, u);
+    origin = add(scale(u, s0), scale(n, lower));
+    A = scale(u, T / 2);
+    B = scale(n, W);
+    fullPeriod = true;
+    if (kind === "moebius") {
+      // Centre line true to scale; the band is made narrower if it would cut itself.
+      const Rm = T / 2 / (2 * Math.PI);
+      const half = Math.min(W / 2, 0.55 * Rm);
+      map = (xi, eta) => {
+        const th = 2 * Math.PI * xi;
+        const t = (2 * eta - 1) * half;
+        const rr = Rm + t * Math.cos(th / 2);
+        return [rr * Math.cos(th), rr * Math.sin(th), t * Math.sin(th / 2)];
+      };
+      for (const eta of [0, 1]) mirrors.push(Array.from({ length: 129 }, (_, i) => map(i / 128, eta)));
+    } else {
+      // Figure-8 Klein bottle: (θ + 2π, −v) is the same point as (θ, v).
+      const R0 = 2;
+      map = (xi, eta) => {
+        const th = 2 * Math.PI * xi;
+        const v = 2 * Math.PI * eta;
+        const c = Math.cos(th / 2);
+        const sn = Math.sin(th / 2);
+        const rr = R0 + c * Math.sin(v) - sn * Math.sin(2 * v);
+        return [rr * Math.cos(th), rr * Math.sin(th), sn * Math.sin(v) + c * Math.sin(2 * v)];
+      };
+    }
+  } else {
+    // 22x: corners at 2-fold centers, sides along the two glide directions.
+    if (g.glides.length === 0 || g.centers.length === 0) return null;
+    const u1 = unit(g.glides[0].u);
+    const u2 = { x: -u1.y, y: u1.x };
+    A = scale(shortestAlong(u1, g.t1, g.t2), 0.5);
+    B = scale(shortestAlong(u2, g.t1, g.t2), 0.5);
+    const c = g.centers.filter((z) => z.order === 2).sort((p, q) => dist(p.point, g.reference) - dist(q.point, g.reference))[0];
+    if (!c) return null;
+    origin = c.point;
+    map = (xi, eta) => {
+      // Square → disk (odd, keeps antipodes), disk → hemisphere, hemisphere → cross-cap.
+      const X0 = 2 * xi - 1;
+      const Y0 = 2 * eta - 1;
+      const X = X0 * Math.sqrt(Math.max(0, 1 - (Y0 * Y0) / 2));
+      const Y = Y0 * Math.sqrt(Math.max(0, 1 - (X0 * X0) / 2));
+      const rho = Math.min(1, Math.hypot(X, Y));
+      const uu = Math.atan2(Y, X);
+      const v = (rho * Math.PI) / 2;
+      return [Math.cos(uu) * Math.sin(2 * v), Math.sin(uu) * Math.sin(2 * v), Math.cos(v) ** 2 - Math.cos(uu) ** 2 * Math.sin(v) ** 2];
+    };
+    for (const [xi, eta] of [[0, 0], [1, 0], [1, 1], [0, 1]]) {
+      const w = add(add(origin, scale(A, xi)), scale(B, eta));
+      const z = g.centers.find((q) => dist(q.point, w) < 1e-6 * (norm(A) + norm(B)));
+      if (z) markers.push({ pos: map(xi, eta), order: z.order, classIndex: z.classIndex, corner: false });
+    }
+  }
+
+  // Grid mesh.
+  const N = kind === "moebius" ? 160 : 96;
+  const M = kind === "moebius" ? 24 : 96;
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const planar: Point[] = [];
+  const indices: number[] = [];
+  for (let j = 0; j <= M; j++) {
+    for (let i = 0; i <= N; i++) {
+      const xi = i / N;
+      const eta = j / M;
+      positions.push(...map(xi, eta));
+      // With fullPeriod the texture spans a whole period T along A (= T/2): u ∈ [0, ½].
+      uvs.push(fullPeriod ? xi / 2 : xi, eta);
+      planar.push(add(add(origin, scale(A, xi)), scale(B, eta)));
+    }
+  }
+  const at = (i: number, j: number) => j * (N + 1) + i;
+  for (let j = 0; j < M; j++) {
+    for (let i = 0; i < N; i++) indices.push(at(i, j), at(i + 1, j), at(i + 1, j + 1), at(i, j), at(i + 1, j + 1), at(i, j + 1));
+  }
+
+  // Normalize so that the median stretch is 1, and report the typical range.
+  const ratios: number[] = [];
+  const h = 1e-3;
+  for (let j = 1; j < 12; j++) {
+    for (let i = 1; i < 12; i++) {
+      const xi = i / 12;
+      const eta = j / 12;
+      const p = map(xi, eta);
+      ratios.push(len3(p, map(xi + h, eta)) / (h * norm(A)), len3(p, map(xi, eta + h)) / (h * norm(B)));
+    }
+  }
+  ratios.sort((x, y) => x - y);
+  const median = ratios[Math.floor(ratios.length / 2)] || 1;
+  const k = 1 / median;
+  const sc = (v: Vec3): Vec3 => [v[0] * k, v[1] * k, v[2] * k];
+  const pct = (q: number) => ratios[Math.floor(q * (ratios.length - 1))] / median;
+  const mesh: BodyMesh = {
+    kind,
+    positions: positions.map((x) => x * k),
+    uvs,
+    indices,
+    planar,
+    region: { origin, a: fullPeriod ? scale(A, 2) : A, b: B },
+    shiftable: fullPeriod,
+    stretch: [pct(0.05), pct(0.95)],
+    markers: markers.map((m) => ({ ...m, pos: sc(m.pos) })),
+    mirrors: mirrors.map((l) => l.map(sc)),
+    place: (w) => {
+      const det = cross(A, B);
+      const q = sub(w, origin);
+      return sc(map(cross(q, B) / det, cross(A, q) / det));
+    },
+  };
+  return center(mesh);
+}
+
+const unit = (a: Point) => scale(a, 1 / norm(a));
+const norm = (a: Point) => Math.hypot(a.x, a.y);
+const len3 = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+
+/** Shortest nonzero lattice vector parallel to u. */
+function shortestAlong(u: Point, t1: Point, t2: Point): Point {
+  let best: Point | null = null;
+  for (let m = -8; m <= 8; m++) {
+    for (let k = -8; k <= 8; k++) {
+      if (m === 0 && k === 0) continue;
+      const v = { x: m * t1.x + k * t2.x, y: m * t1.y + k * t2.y };
+      if (Math.abs(cross(v, u)) > 1e-6 * norm(v)) continue;
+      if (!best || norm(v) < norm(best)) best = v;
+    }
+  }
+  return best ?? t1;
+}

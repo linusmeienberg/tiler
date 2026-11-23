@@ -8,7 +8,7 @@ import { canonicalDomain, insideConvex, type OrbifoldDomain } from "./canonical"
 import { construct, type Construction } from "./construction";
 import type { Realization } from "./groups";
 import { apply, compose, inverse, translation, type Isometry, type Point } from "./isometry";
-import { inventory } from "./inventory";
+import { inventory, type Inventory } from "./inventory";
 
 export type DomainMode = "voronoi" | "orbifold";
 
@@ -22,6 +22,8 @@ export interface Tiling {
   orbifold: OrbifoldDomain | null;
   /** Why the orbifold was not available (the Voronoi cell is used instead). */
   orbifoldError: string | null;
+  /** Inventory (only computed in orbifold mode). */
+  inventory: Inventory | null;
   centroid: Point;
   /** Max distance of a domain vertex from the centroid. */
   reach: number;
@@ -44,8 +46,9 @@ export function buildTiling(realization: Realization, baseFrac: Point, mode: Dom
   let domain = c.domain;
   let orbifold: OrbifoldDomain | null = null;
   let orbifoldError: string | null = null;
+  let inv: Inventory | null = null;
   if (mode === "orbifold") {
-    const inv = inventory(c, base);
+    inv = inventory(c, base);
     // Reference for the choices the group leaves open: the origin of the group table.
     const r = inv ? canonicalDomain(c, inv, base, { x: 0, y: 0 }) : { error: "keine Inventur" };
     if ("error" in r) orbifoldError = r.error;
@@ -56,7 +59,7 @@ export function buildTiling(realization: Realization, baseFrac: Point, mode: Dom
   }
   const centroid = polygonCentroid(domain);
   const reach = Math.max(...domain.map((v) => Math.hypot(v.x - centroid.x, v.y - centroid.y)));
-  return { realization, base, domain, translations: c.translations!, orbifold, orbifoldError, centroid, reach };
+  return { realization, base, domain, translations: c.translations!, orbifold, orbifoldError, inventory: inv, centroid, reach };
 }
 
 /**
