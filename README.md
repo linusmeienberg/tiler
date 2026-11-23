@@ -1,263 +1,284 @@
 # tiler
 
-Ein Browser-Werkzeug für Symmetrien ebener Ornamente, mit zwei Arbeitsmodi:
-
-- **Analyse:** das Foto eines periodischen Mosaiks laden und Symmetrieelemente
-  einzeichnen. Das Werkzeug prüft, ob sie zusammenpassen, bestimmt die
-  Symmetriegruppe in Conway-Notation und baut das Bild aus dem
-  Fundamentalbereich wieder auf, um es mit dem Original zu vergleichen.
-- **Generierung:** eine der 17 Ornamentgruppen wählen, ein Bild als Motiv in den
-  Fundamentalbereich legen und die Ebene damit pflastern. Das Ergebnis lässt
-  sich als SVG oder PNG exportieren.
-
-![Analyse: drei Spiegelachsen erzeugen *442 (p4m)](docs/analyse.jpg)
-
-![Generierung: Motiv unter der Gruppe 632 (p6)](docs/generierung.jpg)
+Symmetrien in Mosaiken entdecken, sie als räumlichen Körper ansehen und
+bemalen und daraus eigene Ornamente erzeugen. Alles läuft direkt im Browser.
 
 **Ausprobieren:** https://linusmeienberg.github.io/tiler/
 
-Es läuft komplett im Browser: kein Server, keine Daten verlassen den Rechner.
+![Ein bemalter Orbifold wird zum Muster](docs/muster.jpg)
 
-## Schnellstart
+## Worum es geht
+
+Fliesen, Tapeten, Stoffe und Mosaike wiederholen ihr Motiv nach festen Regeln:
+Sie lassen sich verschieben, drehen oder spiegeln, ohne sich zu verändern.
+Mathematisch gibt es dafür genau **17 Möglichkeiten**, die 17
+Ornamentgruppen. tiler hilft,
+
+- herauszufinden, welche davon ein Mosaik hat;
+- den **Orbifold** zu sehen, also das kleinste Stück, aus dem sich das ganze
+  Muster ergibt, zusammengeklebt zu einem Körper;
+- aus einem Bild oder einer eigenen Malerei ein neues Muster zu machen.
+
+Dafür gibt es drei Modi, umschaltbar oben links:
+
+| Modus | wofür |
+|---|---|
+| **Analyse** | ein Foto laden, Spiegel und Drehpunkte einzeichnen, die Symmetrie bestimmen und prüfen |
+| **Orbifold** | den Orbifold in 3D drehen, ansehen und bemalen |
+| **Generierung** | eine Symmetrie wählen, ein Motiv hineinlegen, das Muster exportieren |
+
+Die kleinen blauen Pfeile zwischen den Reitern übergeben, woran man gerade
+arbeitet, an den nächsten Modus.
+
+Es gibt keinen Server: Bilder und Zeichnungen verlassen den Rechner nicht.
+
+## Anwendungsbeispiele
+
+### 1. Die Symmetrie eines Mosaiks bestimmen
+
+![Analyse: drei Spiegel ergeben *442](docs/analyse.jpg)
+
+1. Im Modus **Analyse** ein Foto laden (»Bild laden« oder Datei
+   hineinziehen). »Beispiel« lädt ein Testmuster.
+2. Symmetrieelemente einzeichnen, die man im Bild sieht. Meist genügen zwei
+   oder drei:
+   - **Spiegelachse** (Taste S): entlang einer Linie ziehen, an der das Muster
+     gespiegelt ist;
+   - **Drehzentrum** (Taste D): auf einen Punkt klicken, um den sich das Muster
+     drehen lässt. Mit 2, 3, 4 oder 6 wählt man, wie oft es sich bei einer
+     vollen Umdrehung wiederholt;
+   - **Gleitachse** (G) und **Gitter** (T), falls nötig.
+
+   Punkte rasten an passenden Stellen ein, Alt schaltet das ab.
+3. Rechts unter **Inventur** erscheint die Symmetriegruppe, z. B. **\*442
+   (p4m)**. Haken bei »Alle Symmetrieelemente der Gruppe« zeigt alle Spiegel
+   und Drehpunkte, die daraus folgen. Passen die Elemente nicht zusammen, warnt
+   tiler sofort.
+4. Mit dem **Startpunkt** (Taste P) einen Punkt ins Bild setzen. Dann sieht
+   man den Fundamentalbereich, also das Stück, aus dem das Muster entsteht, und
+   seine Kopien. Der Regler »Wortlänge« baut sie Schritt für Schritt auf.
+
+### 2. Prüfen, ob die eingezeichnete Symmetrie stimmt
+
+![Prüfung: falsch platzierte Spiegel ergeben rote Abweichungen](docs/pruefung.jpg)
+
+Unter **Prüfung am Bild**:
+
+- **Aus D** setzt das Bild nur aus dem Inhalt des Fundamentalbereichs neu
+  zusammen.
+- **Differenz** zeigt rot, wo das vom Original abweicht.
+
+Dazu nennt tiler eine Zahl und ein Urteil. Im Bild oben liegen die Spiegel 15
+Pixel daneben. Die Gruppe ist in sich stimmig, passt aber nicht zum Foto, und
+genau das zeigt die Differenz.
+
+### 3. Den Orbifold eines Mosaiks in 3D ansehen
+
+![Orbifold: das Foto als Kissen](docs/orbifold.jpg)
+
+1. In der Analyse die Gruppe einzeichnen und p setzen, wie in Beispiel 1.
+2. Auf den Pfeil **→** zwischen »Analyse« und »Orbifold« klicken.
+
+Der ausgeschnittene Bildinhalt wird zum Körper gefaltet oder gerollt, hier
+zu einem Kissen. Jede Gruppe hat ihren eigenen Körper: Kegel, Zylinder,
+Tetraeder, Möbiusband und mehr (siehe [Der Orbifold als
+Körper](#der-orbifold-als-körper)).
+
+- Linksziehen dreht, rechts ziehen verschiebt, Scrollen zoomt.
+- **Markierungen** zeigen, welche Kanten zusammengeklebt sind (gleiche
+  Striche) und wo die Drehpunkte liegen (farbige Kugeln).
+- **Torus (Gitter)** zeigt statt des Orbifolds die ganze Gitterzelle als
+  Donut.
+
+### 4. Einen Orbifold bemalen und daraus ein Muster machen
+
+![Malen auf dem Kegel 4*2](docs/malen.jpg)
+
+1. Im Modus **Orbifold** eine Symmetriegruppe im Dropdown wählen. Es erscheint
+   ein leerer, weißer Orbifold.
+2. Mit **Shift + Ziehen** auf den Körper malen, Farbe und Pinselbreite in der
+   Seitenleiste. Jeder Strich setzt sich über die Klebekanten fort, ⌘Z nimmt
+   ihn zurück.
+3. **Torus (Gitter)** zeigt, wie die Malerei sich in der Gitterzelle
+   wiederholt:
+
+   ![Dieselbe Malerei auf dem Torus](docs/torus.jpg)
+
+4. Der Pfeil **→** zwischen »Orbifold« und »Generierung« macht daraus ein
+   Muster (Bild ganz oben). Dort lässt es sich als PNG speichern.
+
+### 5. Ein Ornament aus einem eigenen Bild erzeugen
+
+![Generierung: Motiv unter der Gruppe 632](docs/generierung.jpg)
+
+1. Im Modus **Generierung** eine Gruppe wählen und Zellgröße usw. einstellen.
+2. »Bild laden« oder »Beispiel«: Das Bild wird in den Fundamentalbereich
+   gelegt, und die Ebene füllt sich.
+3. Das Motiv mit der Maus verschieben, Größe und Drehung mit den Reglern
+   anpassen.
+4. »Ausschnitt speichern« exportiert den sichtbaren Ausschnitt. Ist das Motiv
+   ein SVG, ist auch das Ergebnis ein SVG, sonst ein PNG.
+
+Der Pfeil **←** bringt das Muster als Orbifold zurück in die 3D-Ansicht.
+
+## Bedienung auf einen Blick
+
+| | Maus und Tasten |
+|---|---|
+| alle Modi | Scrollen verschiebt, ⌘/Strg + Scrollen zoomt, F passt die Ansicht ein |
+| Analyse | V Auswahl, T Gitter, D Drehzentrum (2/3/4/6 = Ordnung), S Spiegel, G Gleitachse, P Startpunkt, Entf löscht, ⌘Z rückgängig, Alt ohne Einrasten, [ ] Wortlänge |
+| Orbifold | Ziehen dreht, Shift + Ziehen malt, rechte Maustaste verschiebt, ⌘Z nimmt einen Strich zurück |
+| Generierung | Ziehen verschiebt das Motiv, den Punkt p ziehen ändert den Bereich, Leertaste + Ziehen verschiebt die Ansicht |
+
+## Hintergrund
+
+### Symmetriegruppen und Conway-Notation
+
+Ein periodisches Muster hat Verschiebungen in zwei Richtungen als Symmetrie
+(ein **Gitter**), dazu je nach Muster **Drehungen** um 180°, 120°, 90° oder
+60°, **Spiegelungen** und **Gleitspiegelungen** (spiegeln und dabei
+verschieben). Die Gesamtheit dieser Symmetrien ist die Symmetriegruppe. Es gibt
+genau 17 Möglichkeiten.
+
+tiler schreibt sie in der **Orbifold-Notation von Conway**, daneben steht der
+kristallographische Name (z. B. p4m):
+
+| Zeichen | Bedeutung |
+|---|---|
+| Ziffer n vor dem \* | ein Drehzentrum der Ordnung n, durch das kein Spiegel geht (Kegelspitze) |
+| \* | ein Spiegel(rand) |
+| Ziffer n nach dem \* | eine Ecke, in der sich n Spiegel treffen (Spiegelecke) |
+| x | eine Gleitspiegelung, die keinen Spiegel kreuzt |
+| o | nur Verschiebungen |
+
+Beispiel: **\*442** heißt Spiegel, an denen sich Ecken mit 4, 4 und 2 Spiegeln
+bilden. Jedes Zeichen hat einen Preis (n → (n−1)/n, \*n → (n−1)/2n, \* und x
+→ 1, o → 2), und bei jedem ebenen Muster ergibt die Summe genau 2. tiler zeigt
+diese Preisprobe in der Inventur, dazu eine unabhängige Flächenprobe.
+Mathematisch ist die Summe 2 die Bedingung, dass der Orbifold flach ist
+(Euler-Charakteristik 0), siehe Conway & Huson, *The Orbifold Notation for
+Two-Dimensional Groups* (2002).
+
+### Fundamentalbereich: Voronoi oder Orbifold
+
+Der **Fundamentalbereich** D ist ein Stück der Ebene, dessen Kopien unter
+allen Symmetrien die Ebene genau einmal bedecken. tiler bietet zwei Wahlen:
+
+- **Voronoi-Bereich von p:** alle Punkte, die näher an p liegen als an jeder
+  Kopie von p. Seine Form hängt von p ab.
+- **Orbifold (kanonisch):** Spiegel bilden den Rand, Drehzentren und
+  Spiegelecken die Ecken, und die übrigen Kanten sind paarweise verklebt. Seine
+  Form ist durch die Gruppe festgelegt; p wählt nur, welche Kopie gezeigt
+  wird. Wo die Gruppe eine Wahl offen lässt (z. B. welche Klasse von
+  Drehzentren bei 333 auf die Faltkante kommt), entscheidet ein fester
+  Bezugspunkt: das zuerst eingezeichnete Element bzw. der Nullpunkt.
+
+### Der Orbifold als Körper
+
+Der Orbifold ist der Fundamentalbereich mit seinen Verklebungen, also die
+Ebene »geteilt durch die Gruppe«. tiler baut ihn als Körper:
+
+| Gruppe | Körper | unverzerrt? |
+|---|---|---|
+| \*2222, \*442, \*333, \*632 | der Bereich selbst, flach, Rand ganz aus Spiegeln | ja |
+| \*\* | Zylinder, beide Ränder Spiegel | ja |
+| 4\*2, 3\*3, 2\*22 | Kegeltüte um die Kegelspitze, Rand Spiegel | ja |
+| 442, 632, 333 | Kissen: der Bereich gefaltet, Kegelspitzen als Ecken | ja (flach), aufgebläht leicht gedehnt |
+| 22\* | Tasche, offen entlang des Spiegels | wie Kissen |
+| 2222 | Tetraeder, die vier Ecken sind die vier Arten von 2-Zentren | ja |
+| o | Torus (Donut) | nein |
+| \*x | Möbiusband, Rand Spiegel | nein |
+| xx | Kleinsche Flasche (durchdringt sich selbst) | nein |
+| 22x | Kreuzhaube = projektive Ebene, mit zwei Kegelspitzen | nein |
+
+Die unverzerrten Körper entstehen durch Rollen oder Falten, wie bei Papier.
+Für die anderen gibt es im Raum keine unverzerrte Form, beim Torus etwa wäre
+außen zu wenig und innen zu viel Fläche. tiler zeigt sie trotzdem und nennt
+den Dehnungsbereich der Textur.
+
+**Torus:** Jedes Muster hat ein Gitter, und die Ebene, in der man um
+Gitterverschiebungen versetzte Punkte als gleich ansieht, ist ein Torus (wie
+eine Spielwelt, in der man rechts hinaus- und links wieder hineinläuft). Er
+trägt eine ganze Gitterzelle, also so viele Kopien des Orbifolds, wie die
+Flächenprobe Bereiche pro Zelle nennt. Ein Regler verschiebt, welcher Streifen
+außen liegt.
+
+**Freiheitsgrade:** Stetig verschieben lässt sich die Textur nur, wo eine
+Richtung von allen Symmetrien respektiert wird. Das ist bei o, \*\*, \*x und xx
+der Fall, dort gibt es einen Regler. Bei allen Gruppen mit Drehzentren oder
+Spiegeln in mehreren Richtungen ist die Lage starr.
+
+### Wie tiler rechnet
+
+- **Isometrien** sind affine Abbildungen p ↦ M·p + t (`src/isometry.ts`).
+- **Gruppe aus Erzeugern** (`src/group.ts`): Breitensuche über Wörter in den
+  eingezeichneten Elementen und ihren Inversen, mit Wortlänge. Doppelte
+  Elemente erkennt ein räumlicher Hash, und die Suche endet in einem Radius um
+  den Startpunkt.
+- **Voronoi-Bereich** (`src/construction.ts`): Halbebenen-Schnitt mit den
+  Mittelsenkrechten zu den Kopien von p. Die Kopie unter einem Punkt ist die
+  mit dem nächsten Bahnpunkt.
+- **Inventur** (`src/inventory.ts`):
+  - Drehzentren werden per Union-Find in Klassen zusammengefasst. Gehen
+    Spiegel durch ein Zentrum, ist es eine Spiegelecke, sonst eine Kegelspitze.
+  - Spiegel ergeben einen Rand, wenn sie sich schneiden, sonst einen pro Klasse
+    paralleler Spiegel.
+  - Ein x gibt es, wenn eine Gleitspiegelung die spiegelfreie Kammer von p auf
+    sich abbildet. Wie viele, folgt aus der Preisprobe.
+- **Kanonischer Bereich** (`src/canonical.ts`): eine Konstruktion für alle 17
+  Gruppen.
+  - Mit Spiegeln: eine Spiegelkammer, bei einer Kegelspitze darin ein 1/n-Keil,
+    bei parallelen Spiegeln eine Periode des Streifens.
+  - Ohne Spiegel: die Voronoi-Zelle eines Zentrums höchster Ordnung unter
+    seiner eigenen Bahn, in n Keile geschnitten. Bei 442 ergibt das das
+    Viereck 4-2-4-2.
+  - Partnerkanten werden unter den Gruppenelementen gesucht.
+- **Körper** (`src/bodies.ts`): Rollen und Falten des kanonischen Bereichs.
+  Für \*x, xx und 22x werden Standardformen über einem Rechteck verwendet, das
+  so aus dem Muster geschnitten ist, dass seine Kanten passend verklebt sind.
+- **Die 17 Gruppen** (`src/groups.ts`) sind als Gittertyp plus
+  Nebenklassenvertreter abgelegt. Für die Generierung werden die Kopien als
+  Gitterverschiebung ∘ Nebenklasse aufgezählt (`src/tiling.ts`).
+- **Prüfung am Bild** (`src/overlay.ts`): Kopien von D in einer Canvas
+  zusammensetzen und die mittlere Farbdifferenz zum Original bilden. Als
+  Maßstab dient das gegen sich selbst verschobene Bild.
+- **Malen** (`src/orbifold3d.ts`): Ein Strahl vom Mauszeiger trifft den
+  Körper, und über die Texturkoordinate kommt man zurück zum Punkt im Muster.
+  Striche werden in Musterkoordinaten gespeichert und unter allen
+  Gruppenelementen gezeichnet.
+
+Getestet wird u. a. für alle 17 Gruppen, dass sie erkannt werden, dass die
+Fundamentalbereiche die Ebene genau einmal pflastern, dass die Körper unverzerrt
+sind (bzw. verklebte Kanten im Raum aufeinanderliegen) und dass die Form des
+Orbifolds nicht von p abhängt.
+
+## Entwicklung
 
 Gebraucht wird [Node.js](https://nodejs.org) (Version in `.nvmrc`).
 
 ```bash
 npm install
 npm run dev       # http://localhost:5173
-```
-
-## Analyse
-
-1. **Bild laden** (Knopf oder hineinziehen). »Beispiel« lädt ein \*442-Testmuster.
-2. **Symmetrieelemente einzeichnen:**
-
-   | Werkzeug | Taste |
-   |---|---|
-   | Gitter | T |
-   | Drehzentrum (Ordnung mit 2/3/4/6) | D |
-   | Spiegelachse | S |
-   | Gleitachse (die Länge ist der Gleitvektor) | G |
-
-   Punkte rasten an Gitterpunkte und vorhandene Elemente ein, Achsen an
-   15°-Richtungen. Alt schaltet das Einrasten ab.
-3. **Verträglichkeit:** Passen die Elemente nicht zusammen (z. B. ein
-   quadratisches Gitter mit einem 3-zähligen Zentrum), erscheint sofort eine
-   Warnung.
-4. **Inventur:** Conway-Symbol und internationaler Name, dazu die Preisprobe
-   (Summe der Kosten = 2) und eine unabhängige Flächenprobe. Auf Wunsch zeigt die
-   Ansicht alle Spiegel, Gleitachsen und Drehzentren der Gruppe, die Zentren nach
-   Bahnklasse eingefärbt.
-5. **Startpunkt p** (Taste P):
-   - zeigt den Fundamentalbereich D (Dirichlet-Bereich von p) und seine Kopien;
-   - der Regler baut die Kopien schrittweise nach Wortlänge in den Erzeugern auf;
-   - unter dem Zeiger steht das Gruppenelement, das D in diese Kopie abbildet.
-6. **Fundamentalbereich wählen:** neben der Voronoi-Zelle von p gibt es den
-   **Orbifold**, also den kanonischen Bereich der Gruppe:
-   - Spiegel bilden seinen Rand.
-   - Drehzentren und Spiegelecken sind seine Ecken, eingefärbt nach Bahnklasse.
-   - Die übrigen Kanten sind paarweise markiert. Gleiche Striche bedeuten
-     verklebt, und zwar durch eine Drehung (schwarz), eine Translation
-     (violett) oder eine Gleitspiegelung (grün gestrichelt). Der Pfeil zeigt die
-     Richtung.
-   - p wählt die Kopie.
-
-   Kopien, Prüfung am Bild und Generierung arbeiten mit jedem der beiden
-   Bereiche.
-7. **Prüfung am Bild:**
-   - »Aus D« setzt das Bild nur aus dem Inhalt von D zusammen.
-   - »Differenz« zeigt, wo das vom Original abweicht.
-   - Als Vergleichsmaßstab dient das Bild, gegen sich selbst verschoben.
-8. **Weitergeben:** Der Pfeil »→« zwischen den Reitern »Analyse« und
-   »Orbifold« übernimmt die erkannte Gruppe, p und den Bildinhalt in den
-   Orbifold-Modus.
-
-## Orbifold (3D)
-
-Der mittlere Modus zeigt einen Orbifold in 3D, mit three.js.
-
-- **Startzustand:** Eine Gruppe aus dem Dropdown ergibt einen leeren, weißen
-  Orbifold zum Bemalen.
-- **Weitergeben zwischen den Modi:** Die Pfeile zwischen den Reitern
-  übernehmen Gruppe, p und Inhalt:
-
-  | Pfeil | übernimmt |
-  |---|---|
-  | Analyse → Orbifold | den ausgeschnittenen Bildinhalt |
-  | Generierung → Orbifold | das Motiv |
-  | Orbifold → Generierung | den bemalten Orbifold als Motiv |
-
-  Bei jeder Übernahme beginnt die Malerei neu. Beim Weg in die Generierung ist
-  sie ins Motiv eingebrannt. Erste Stufe ist der **Torus** ℝ²/Λ: Die Ebene wird aufgefasst,
-als wären Punkte, die sich um eine Gitterverschiebung unterscheiden, derselbe
-Punkt. Als Textur dient eine Gitterzelle, aufgebaut aus Kopien von D und darum
-nahtlos (`src/cell.ts`, `src/orbifold3d.ts`).
-
-- **Verzerrung:** Ein flacher Torus lässt sich im Raum nicht unverzerrt bauen.
-  Darum dehnt der Donut die Textur außen und staucht sie innen; der mittlere
-  Ring der Röhre ist maßstabsgetreu. Ist die Röhre zu dick, wird sie verkürzt,
-  und schiefe Gitter werden geschert. Die Ansicht gibt alle Faktoren an.
-- **Regler:** Er verschiebt die Textur entlang der Röhre, also die willkürliche
-  Wahl, welcher Streifen außen liegt.
-- **Schalter:** Er tauscht, welcher Gittervektor um die Röhre läuft.
-
-Die Ansicht **Orbifold** zeigt den eigentlichen Quotienten aus Ebene und
-Symmetriegruppe als Körper, gebaut durch Rollen oder Falten des kanonischen
-Bereichs D (`src/bodies.ts`):
-
-| Gruppe | Körper |
-|---|---|
-| \*2222, \*442, \*333, \*632 | der ausgeschnittene Bereich selbst (Spiegelvieleck) |
-| \*\* | Zylinder, beide Ränder Spiegel |
-| 4\*2, 3\*3, 2\*22 | Kegeltüte um die Kegelspitze, Rand Spiegel |
-| 442, 632, 333 | Kissen: D gefaltet, doppelt belegtes Dreieck |
-| 22\* | Tasche, offen entlang des Spiegels |
-| 2222 | Tetraeder (Dreieck aus 2-Zentren, entlang des Mittendreiecks gefaltet) |
-| o | der Torus |
-| \*x | Möbiusband, Rand Spiegel |
-| xx | Kleinsche Flasche (Achterform) |
-| 22x | Kreuzhaube (projektive Ebene) mit den zwei Kegelspitzen auf der Durchdringungslinie |
-
-- **Verzerrung:** Alle diese Körper sind unverzerrt. Getestet wird, dass jede
-  Strecke ihre Länge behält und verklebte Kanten im Raum aufeinanderliegen.
-  Einzige Ausnahme sind Kissen und Taschen: Der Regler »Aufblähen« macht sie
-  räumlich und dehnt die Textur dabei leicht.
-- **Markierungen:** Dieselben Markierungen wie im Muster liegen auch auf
-  Körper und Torus: Spiegelkanten, paarweise markierte Klebekanten mit Pfeil
-  sowie Zentren mit ihrer Zähligkeit, in der Farbe ihrer Klasse. Sie werden für
-  alle Kopien von D in die Textur gezeichnet und passen darum an den Klebestellen
-  zusammen. Bei Körpern aus D selbst sitzen sie knapp innerhalb der Kanten.
-  Auf den Körpern zeigen farbige Kugeln die Kegelspitzen und Spiegelecken (statt
-  der Symbole in der Textur), auf dem Torus die Symbole. Alles lässt
-  sich mit einem Schalter ausblenden.
-- **Nicht-orientierbare Fälle:** \*x, xx und 22x lassen sich im Raum nicht
-  unverzerrt bauen, für die Kleinsche Flasche und die Kreuzhaube nicht einmal
-  ohne Selbstdurchdringung.
-  - Dargestellt werden sie mit Standard-Immersionen eines Rechtecks aus dem
-    Muster. Das Rechteck ist so geschnitten, dass seine Kanten genau so
-    verklebt sind, wie die Immersion es verlangt.
-  - Getestet wird, dass es ein Fundamentalbereich ist und dass Randpunkte, die
-    die Gruppe identifiziert, auf denselben Punkt des Körpers fallen.
-  - Die Ansicht gibt den typischen Dehnungsbereich an.
-  - Bei Möbiusband und Kleinscher Flasche verschiebt ein Regler die Textur
-    entlang der Spiegel bzw. Gleitachsen. Das ist der einzige stetige
-    Freiheitsgrad, den diese Gruppen lassen.
-
-### Malen auf dem Orbifold
-
-Im Orbifold-Modus lässt sich direkt auf den 3D-Körper oder den Torus malen:
-**Shift + Ziehen** auf der Fläche malt, Ziehen ohne Shift dreht die Ansicht.
-So wechselt man schnell zwischen Drehen und Stift.
-
-- **Speicherung:** Jeder Strich wird in Musterkoordinaten gespeichert. Über die
-  Texturkoordinate des getroffenen Punkts kommt man vom Körper zurück zum
-  Muster.
-- **Darstellung:** Jeder Strich wird unter allen Gruppenelementen gezeichnet.
-  Darum läuft er über Spiegel und Klebekanten weiter, und auf dem Torus
-  erscheint er in allen Kopien.
-- **Werkzeuge:** Farbe, Pinselbreite, Rückgängig (⌘Z) und Alles löschen.
-- **Gruppenwechsel:** Ändert sich die Symmetriegruppe, wird die Malerei
-  gelöscht.
-
-## Generierung
-
-- **Gruppe wählen.** Je nach Gittertyp stellt man Zellgröße, Seitenverhältnis
-  und Winkel ein.
-- **Motiv:** »Bild laden« oder »Beispiel«.
-  - Ziehen verschiebt das Motiv. Auch in gespiegelten oder gedrehten Kopien
-    folgt es dem Zeiger.
-  - Größe und Drehung stellt man mit Reglern ein.
-- **Form von D:** Voronoi-Zelle von p oder Orbifold, wie in der Analyse.
-  Den Punkt p ziehen ändert die Form der Voronoi-Zelle bzw. wählt die Kopie
-  des Orbifolds.
-- **Export des sichtbaren Ausschnitts:**
-  - Ist das Motiv ein SVG, entsteht ein SVG. Das Motiv steht darin einmal in
-    `<defs>`, jede Kopie ist ein `<use>` mit Transformation und Clip auf D.
-  - Sonst entsteht ein PNG in doppelter Auflösung.
-
-Verschieben: Leertaste oder rechte Maustaste und ziehen, oder scrollen.
-Zoomen: ⌘/Strg und scrollen. »Einpassen«: Taste F.
-
-## Wie es funktioniert
-
-- **Isometrien** sind affine Abbildungen p ↦ M·p + t (`src/isometry.ts`).
-- **Gruppe aus Erzeugern** (`src/group.ts`):
-  - Breitensuche über Wörter in den Erzeugern und ihren Inversen, mit Wortlänge.
-  - Doppelte Elemente werden über einen räumlichen Hash erkannt.
-  - Die Suche endet, wenn ein Element das Zentrum weiter als einen Radius
-    verschiebt.
-- **Fundamentalbereich** (`src/construction.ts`):
-  - Er ist die Voronoi-Zelle von p in seiner Bahn, berechnet durch
-    Halbebenen-Schnitt.
-  - Die Kopie unter einem Punkt ist die mit dem nächsten Bahnpunkt.
-- **Inventur** (`src/inventory.ts`):
-  - Drehzentren werden per Union-Find in Bahnklassen zusammengefasst. Gehen
-    Spiegel durch ein Zentrum, ist es eine Spiegelecke, sonst eine Kegelspitze.
-  - Spiegel ergeben einen Rand, wenn sie sich schneiden, sonst einen pro Klasse
-    paralleler Spiegel.
-  - Ein x gibt es, wenn eine Gleitspiegelung die spiegelfreie Kammer von p auf
-    sich abbildet. Wie viele es sind, folgt aus der Preisprobe.
-- **Orbifold** (`src/canonical.ts`): eine Konstruktion für alle 17 Gruppen.
-  - Die Form hängt nur von der Gruppe und diesen Regeln ab, nie von p. Wo die
-    Gruppe eine Wahl offen lässt, entscheidet ein fester Bezugspunkt: der
-    erste Punkt des zuerst eingezeichneten Elements, in der Generierung der
-    Nullpunkt. Offen bleibt eine Wahl bei Klassen gleicher Ordnung, z. B. den
-    drei Klassen von 3-Zentren bei 333, und bei Schnitten, die durch kein
-    Zentrum gehen (\*\*, \*x, xx, o). Gebaut wird am Bezugspunkt; p wählt danach
-    nur die Kopie.
-  - Mit Spiegeln: eine Spiegelkammer.
-    - Liegt darin eine Kegelspitze der Ordnung n, wird ein 1/n-Keil der Kammer
-      genommen.
-    - Bei parallelen Spiegeln: eine Periode des Streifens, geschnitten an
-      Drehzentren bzw. an der Gleitachse.
-  - Ohne Spiegel: die Voronoi-Zelle eines Zentrums höchster Ordnung unter seiner
-    eigenen Bahn, in n Keile geschnitten. Die Strahlen laufen durch die Zentren
-    niedrigster Ordnung, für 442 ergibt das das Viereck 4-2-4-2.
-  - Sonst: ein Streifen zwischen Gleitachsen bzw. das Gitterparallelogramm.
-  - Die Partnerkanten findet das Tool unter den Gruppenelementen.
-  - Getestet für alle 17 Gruppen an mehreren Startpunkten: genau einmal
-    pflasternd, jede Kante Spiegel oder verklebt, kein Spiegel im Inneren, jede
-    Klasse als Ecke.
-- **Die 17 Gruppen** (`src/groups.ts`):
-  - Jede ist als Gittertyp plus Nebenklassenvertreter in Gitterkoordinaten
-    abgelegt.
-  - Für die Generierung werden die Kopien als Gittertranslation ∘ Nebenklasse
-    aufgezählt (`src/tiling.ts`).
-  - Aus einer Analyse gewinnt `realizationFromConstruction` Gitter und
-    Nebenklassen zurück.
-
-## Entwicklung
-
-```bash
 npm test          # Vitest
 npm run typecheck
-npm run build     # statische Dateien nach dist/ (relative Pfade, z. B. für GitHub Pages)
+npm run build     # statische Dateien nach dist/
 npm run preview   # den Build lokal ansehen
 ```
+
+Jeder Push auf `main` wird getestet und auf GitHub Pages veröffentlicht.
 
 | Datei | Inhalt |
 |---|---|
 | `src/isometry.ts`, `src/group.ts` | Isometrien, Gruppenerzeugung |
-| `src/construction.ts` | Bahn, Dirichlet-Bereich, Warnungen |
+| `src/construction.ts` | Bahn, Voronoi-Bereich, Warnungen |
 | `src/inventory.ts`, `src/orbifold.ts` | Conway-Notation, Preisprobe |
-| `src/canonical.ts` | kanonischer Fundamentalbereich (Orbifold) mit Verklebungen |
+| `src/canonical.ts` | kanonischer Bereich (Orbifold) mit Verklebungen |
 | `src/overlay.ts` | Prüfung am Bild |
-| `src/groups.ts`, `src/tiling.ts` | die 17 Gruppen, Pflasterung für die Generierung |
-| `src/scene.ts`, `src/view.ts` | eingezeichnete Elemente, Einrasten; Verschieben und Zoomen |
-| `src/draw.ts`, `src/main.ts` | Zeichnen und Bedienung (Analyse) |
-| `src/generate.ts` | Zustand, Zeichnen, Export (Generierung) |
-| `tests/` | u. a. alle 17 Gruppen: Erkennung, lückenlose Pflasterung, Rückgewinnung aus der Analyse |
-
-Die Tests von Gruppenkern, Inventur und Pflasterung laufen ohne Browser. Die
-Bedienoberfläche ist von Hand und mit Playwright geprüft.
-
-## Herkunft
-
-tiler begann als Python-Paket, ein Jupyter-Widget zum Pflastern mit einer
-vorgegebenen Gruppe. Diese Browser-Version löst es ab; die Python-Fassung ist
-nur noch in der Git-Historie zu finden. Ihre Gruppentabelle lebt in
-`src/groups.ts` weiter, mit einer Korrektur: dort waren p3m1 und p31m
-vertauscht.
+| `src/groups.ts`, `src/tiling.ts` | die 17 Gruppen, Pflasterung |
+| `src/scene.ts`, `src/view.ts`, `src/draw.ts`, `src/main.ts` | Analyse: Elemente, Ansicht, Zeichnen, Bedienung |
+| `src/bodies.ts`, `src/cell.ts`, `src/orbifold3d.ts`, `src/orbsource.ts` | Orbifold-Modus: Körper, Texturen, 3D-Ansicht, Malen |
+| `src/generate.ts` | Generierung und Export |
+| `tests/` | Tests (Vitest) |
 
 ## Lizenz
 
