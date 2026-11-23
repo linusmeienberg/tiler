@@ -14,6 +14,8 @@ Ein Browser-Werkzeug für Symmetrien ebener Ornamente, mit zwei Arbeitsmodi:
 
 ![Generierung: Motiv unter der Gruppe 632 (p6)](docs/generierung.jpg)
 
+**Ausprobieren:** https://linusmeienberg.github.io/tiler/
+
 Es läuft komplett im Browser: kein Server, keine Daten verlassen den Rechner.
 
 ## Schnellstart
@@ -259,4 +261,7 @@ vertauscht.
 
 ## Lizenz
 
-MIT, siehe [LICENSE](LICENSE).
+[CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/): Nutzen,
+weitergeben und verändern ist für nicht-kommerzielle Zwecke erlaubt, mit
+Namensnennung (»tiler« von Linus Meienberg, mit Link auf dieses Repository).
+Volltext in [LICENSE](LICENSE).
