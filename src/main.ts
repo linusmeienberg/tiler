@@ -7,6 +7,8 @@ import type { Point } from "./isometry";
 import { canonicalDomain, copyContaining, type CanonicalResult, type OrbifoldDomain } from "./canonical";
 import { overlayCheck, type OverlayResult } from "./overlay";
 import { realizationFromConstruction } from "./tiling";
+import { DEFAULT_PARAMS, findGroup, GROUPS, realize } from "./groups";
+import { snapshot, sourceFor, type OrbState } from "./orbsource";
 import {
   addElement,
   describe,
@@ -27,8 +29,7 @@ import {
 } from "./scene";
 import { fitRect, toWorld, zoomAt, type View } from "./view";
 import * as gen from "./generate";
-import { cellSize, renderCell } from "./cell";
-import type { PatternSource, TorusSettings } from "./orbifold3d";
+import type { TorusSettings } from "./orbifold3d";
 
 // The 3D view (three.js) is loaded only when the orbifold mode is first opened.
 type Orb = typeof import("./orbifold3d");
@@ -78,12 +79,10 @@ let tool: Tool = "select";
 let order: RotationOrder = 4;
 let selectedId: number | null = null;
 let image: HTMLImageElement | null = null;
-let imageSvg: string | null = null; // SVG source of the analysis image, if it is one
 let mode: Mode = loadMode();
 let view: View = { scale: 1, ox: 0, oy: 0 };
 const views: Record<Mode, View | null> = { analyse: null, orbifold: null, generate: null };
 /** Orbifold mode: which pattern it shows, and the torus settings. */
-let orbSource: "analyse" | "generate" = "analyse";
 const torus: TorusSettings = { view: "orbifold", swap: false, shift: 0, inflate: 0.35, slide: 0, marks: true };
 let size = { width: 0, height: 0, dpr: 1 };
 let pointer: Point | null = null; // screen coordinates
@@ -468,53 +467,106 @@ function formatNumber(x: number): string {
 
 // --- orbifold view ------------------------------------------------------------------
 
-let bodyCache: { key: string; domain: OrbifoldDomain | null } = { key: "", domain: null };
+// The orbifold mode's own state: a group, p and a content (see orbsource.ts).
+const ORB_KEY = "tiler.orbifold";
+let orbVersion = 0;
 
-/** One lattice cell of the analysed image, rebuilt from the shown domain D (null if not available). */
-function analysisSource(): PatternSource | null {
+/** A table group on the default lattice, white – the orbifold to paint on. */
+function tableState(conway: string): OrbState {
+  const group = findGroup(conway);
+  const r = realize(group, DEFAULT_PARAMS);
+  const f = { x: 0.2137, y: 0.1312 }; // generic p in lattice coordinates
+  return {
+    version: ++orbVersion,
+    realization: r,
+    label: `${group.conway} (${group.iuc})`,
+    origin: "table",
+    table: { group: group.conway, params: { ...DEFAULT_PARAMS } },
+    base: { x: f.x * r.a1.x + f.y * r.a2.x, y: f.x * r.a1.y + f.y * r.a2.y },
+    reference: { x: 0, y: 0 },
+    paint: null,
+  };
+}
+
+let orbState: OrbState = tableState(
+  (() => {
+    try {
+      return localStorage.getItem(ORB_KEY) ?? "442";
+    } catch {
+      return "442";
+    }
+  })(),
+);
+
+function setOrbState(s: OrbState): void {
+  orbState = s;
+  try {
+    if (s.table) localStorage.setItem(ORB_KEY, s.table.group);
+  } catch {
+    /* ignore */
+  }
+}
+
+// --- transfers between the modes ------------------------------------------------------------
+
+/** Analysis → orbifold: the drawn group, p and the image (cut out by the group). */
+function analysisToOrbifold(): OrbState | null {
   const a = analysis();
   const c = a.auxiliary ? null : a.construction;
-  const domain = currentDomain();
+  const r = c && realizationFromConstruction(c);
   const img = image;
-  const base = scene.base;
-  if (!c?.translations || c.copiesPerCell === null || !img || !base || !domain) return null;
+  if (!r || !img || !scene.base || !a.inventory) return null;
   const inv = a.inventory;
-  const elements = c.elements.map((e) => e.g);
-  // The canonical domain for the body, whatever domain is chosen for display.
-  let orbifold: OrbifoldDomain | null = null;
-  const reference = scene.elements[0]?.points[0] ?? base;
-  if (inv) {
-    if (bodyCache.key !== a.key) {
-      const r = canonicalDomain(c, inv, base, reference);
-      bodyCache = { key: a.key, domain: "error" in r ? null : r.domain };
-    }
-    orbifold = bodyCache.domain;
-  }
   return {
-    key: a.key + img.src + domainMode,
-    label: inv ? `${inv.symbol}${inv.name ? ` (${inv.name})` : ""}` : "eingezeichnete Gruppe",
-    symbol: inv?.symbol ?? "",
-    t1: c.translations.t1,
-    t2: c.translations.t2,
-    orbifold,
-    lines: inv ? { mirrors: inv.mirrors, glides: inv.glides, centers: inv.centers, t1: c.translations.t1, t2: c.translations.t2, reference } : null,
-    base,
-    // The drawn generators define the group (moving p or the image does not change it).
-    groupKey: JSON.stringify(scene.elements),
-    copies: () => elements,
-    render: (av, bv, { origin, marks, strokes }) =>
-      renderCell({
-        a: av,
-        b: bv,
-        origin,
-        ...cellSize(av, bv),
-        domain: domain.polygon,
-        copies: elements,
-        paint: (ctx) => ctx.drawImage(img, 0, 0),
-        marks: marks && orbifold ? { domain: orbifold, copies: elements, ...marks } : undefined,
-        strokes: strokes?.length ? { list: strokes, copies: elements } : undefined,
-      }),
+    version: ++orbVersion,
+    realization: r,
+    label: `${inv.symbol}${inv.name ? ` (${inv.name})` : ""}`,
+    origin: "analyse",
+    base: scene.base,
+    reference: scene.elements[0]?.points[0] ?? scene.base,
+    paint: (ctx) => ctx.drawImage(img, 0, 0),
   };
+}
+
+/** Generation → orbifold: its group, p and the motif. */
+function generationToOrbifold(): OrbState | null {
+  const g = gen.exportForOrbifold();
+  if (!g) return null;
+  return { version: ++orbVersion, ...g, origin: "generate", reference: { x: 0, y: 0 } };
+}
+
+/** Orbifold → generation: the group, p and the (painted) orbifold as motif. */
+function orbifoldToGeneration(): boolean {
+  const shot = snapshot(orbState, orb?.currentStrokes() ?? []);
+  if (!shot) return false;
+  gen.importFromOrbifold({ realization: orbState.realization, label: orbState.label, table: orbState.table, base: orbState.base, ...shot });
+  return true;
+}
+
+function transfer(kind: "analyse-orbifold" | "orbifold-generate" | "generate-orbifold"): void {
+  if (kind === "analyse-orbifold") {
+    const s = analysisToOrbifold();
+    if (!s) return;
+    setOrbState(s);
+    setMode("orbifold");
+  } else if (kind === "generate-orbifold") {
+    const s = generationToOrbifold();
+    if (!s) return;
+    setOrbState(s);
+    setMode("orbifold");
+  } else {
+    if (!orbifoldToGeneration()) return;
+    setMode("generate");
+    fitView();
+  }
+  orb?.resetCamera();
+  requestRender();
+}
+
+function renderTransfers(): void {
+  const a = analysis();
+  const okAnalysis = !a.auxiliary && !!a.construction?.translations && !!a.inventory && !!image && !!scene.base;
+  $<HTMLButtonElement>("#transfer-analyse-orbifold").disabled = !okAnalysis;
 }
 
 /** What the body is, how it is made, whether it is distorted, and how free its placement is. */
@@ -552,15 +604,15 @@ function bodyText(kind: string | null, symbol: string, hasDomain: boolean): stri
 }
 
 function renderOrbifold(): void {
-  const sources = { analyse: analysisSource(), generate: gen.patternSource() };
-  for (const btn of document.querySelectorAll<HTMLButtonElement>("#orb-source button")) {
-    const s = btn.dataset.source as "analyse" | "generate";
-    btn.classList.toggle("active", s === orbSource);
-    btn.disabled = !sources[s];
-  }
-  const source = sources[orbSource];
-  $("#orb-empty").hidden = !!source;
-  $("#orb-torus").hidden = !source;
+  const source = sourceFor(orbState);
+  const select = $<HTMLSelectElement>("#orb-group");
+  select.value = orbState.table ? orbState.table.group : "";
+  $("#orb-origin").textContent =
+    orbState.origin === "analyse"
+      ? "Aus der Analyse übernommen: Gruppe, p und der Bildinhalt."
+      : orbState.origin === "generate"
+        ? "Aus der Generierung übernommen: Gruppe, p und das Motiv."
+        : "Leerer Orbifold zum Bemalen.";
   if (!orb) {
     $("#orb-info").textContent = "3D-Ansicht wird geladen …";
     return;
@@ -617,6 +669,7 @@ function requestRender(): void {
 }
 
 function render(): void {
+  renderTransfers();
   if (mode === "orbifold") {
     renderOrbifold();
     return;
@@ -855,7 +908,6 @@ function loadImage(url: string, svg: boolean): void {
       return;
     }
     image = img;
-    imageSvg = svgText;
     fitView();
   };
   img.onerror = () => {
@@ -1062,16 +1114,9 @@ function isSvg(file: File): boolean {
 $("#example").addEventListener("click", () =>
   loadImage(import.meta.env.BASE_URL + (mode === "generate" ? "motiv.svg" : "beispiel.svg"), true),
 );
-$("#to-generate").addEventListener("click", () => {
-  const c = currentConstruction();
-  const inv = cached.inventory;
-  const r = c && realizationFromConstruction(c);
-  if (!r || !image || !scene.base) return;
-  const label = inv ? `${inv.symbol}${inv.name ? ` (${inv.name})` : ""}` : "eingezeichnete Gruppe";
-  gen.importFromAnalysis(r, label, scene.base, image, imageSvg);
-  setMode("generate");
-  fitView();
-});
+$("#transfer-analyse-orbifold").addEventListener("click", () => transfer("analyse-orbifold"));
+$("#transfer-orbifold-generate").addEventListener("click", () => transfer("orbifold-generate"));
+$("#transfer-generate-orbifold").addEventListener("click", () => transfer("generate-orbifold"));
 $("#export").addEventListener("click", async () => {
   const out = await gen.exportView(view, size.width, size.height);
   if (!out) {
@@ -1164,7 +1209,6 @@ function loadMode(): Mode {
 
 function setMode(m: Mode): void {
   if (size.width > 0) views[mode] = view;
-  if (m === "orbifold" && mode !== "orbifold") orbSource = mode;
   mode = m;
   try {
     localStorage.setItem(MODE_KEY, m);
@@ -1197,13 +1241,29 @@ function setMode(m: Mode): void {
   else if (size.width > 0) fitView();
   requestRender();
 }
-for (const btn of document.querySelectorAll<HTMLButtonElement>("#mode button")) {
+for (const btn of document.querySelectorAll<HTMLButtonElement>("#mode button[data-mode]")) {
   btn.addEventListener("click", () => setMode(btn.dataset.mode as Mode));
 }
 gen.setupPanel(requestRender);
-for (const btn of document.querySelectorAll<HTMLButtonElement>("#orb-source button")) {
-  btn.addEventListener("click", () => {
-    orbSource = btn.dataset.source as "analyse" | "generate";
+{
+  // Group choice in the orbifold mode: a fresh, white orbifold.
+  const select = $<HTMLSelectElement>("#orb-group");
+  const taken = document.createElement("option");
+  taken.value = "";
+  taken.textContent = "übernommen";
+  taken.disabled = true;
+  select.replaceChildren(
+    taken,
+    ...GROUPS.map((g) => {
+      const o = document.createElement("option");
+      o.value = g.conway;
+      o.textContent = `${g.conway}  (${g.iuc})`;
+      return o;
+    }),
+  );
+  select.addEventListener("change", () => {
+    setOrbState(tableState(select.value));
+    orb?.resetCamera();
     requestRender();
   });
 }

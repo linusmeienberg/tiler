@@ -5,11 +5,7 @@
  * State and drawing live here; main.ts routes input and owns the shared canvas,
  * view and image loading.
  */
-import { renderCell, cellSize } from "./cell";
 import { CLASS_COLORS, drawOrbifold, haloStroke, label } from "./draw";
-import type { GroupLines } from "./bodies";
-import type { OrbifoldDomain } from "./canonical";
-import type { PatternSource } from "./orbifold3d";
 import { DEFAULT_PARAMS, findGroup, GROUPS, realize, type LatticeParams, type Realization } from "./groups";
 import { apply, inverse, type Isometry, type Point } from "./isometry";
 import { buildTiling, copyAt, toFractional, visibleCopies, type DomainMode, type Tiling } from "./tiling";
@@ -108,16 +104,60 @@ export function setMotifImage(img: HTMLImageElement, svgText: string | null = nu
 }
 
 /**
- * Take over the analysis: its group (lattice + cosets), its p and its image,
- * placed exactly where it was – so the tiling starts out as the analysis'
- * reconstruction of the image from D.
+ * Take over a (painted) orbifold: its group – the table entry with its lattice,
+ * or a fixed group – its p, and its content as a picture of the region `rect`
+ * (pattern coordinates), placed exactly there.
  */
-export function importFromAnalysis(r: Realization, label: string, base: Point, img: HTMLImageElement, svgText: string | null): void {
-  settings.custom = { realization: r, label };
-  settings.base = toFractional(r, base);
-  setMotifImage(img, svgText, false);
-  settings.motif = { x: img.naturalWidth / 2, y: img.naturalHeight / 2, scale: img.naturalWidth / motifImage!.width, rotationDeg: 0 };
+export function importFromOrbifold(o: {
+  realization: Realization;
+  label: string;
+  table?: { group: string; params: LatticeParams };
+  base: Point;
+  canvas: HTMLCanvasElement;
+  rect: { x: number; y: number; w: number; h: number };
+}): void {
+  if (o.table) {
+    settings.group = o.table.group;
+    settings.params = { ...o.table.params };
+    settings.custom = null;
+  } else {
+    settings.custom = { realization: o.realization, label: o.label };
+  }
+  settings.base = toFractional(o.realization, o.base);
+  motifSvg = null;
+  motifImage = o.canvas;
+  settings.motif = { x: o.rect.x + o.rect.w / 2, y: o.rect.y + o.rect.h / 2, scale: o.rect.w / o.canvas.width, rotationDeg: 0 };
   save();
+}
+
+/** The current group, p and motif – for taking them over into the orbifold mode. */
+export function exportForOrbifold(): {
+  realization: Realization;
+  label: string;
+  table?: { group: string; params: LatticeParams };
+  base: Point;
+  paint: ((ctx: CanvasRenderingContext2D) => void) | null;
+} | null {
+  const t = tiling();
+  if (!t) return null;
+  const group = findGroup(settings.group);
+  const m = settings.motif ? { ...settings.motif } : null;
+  const img = motifImage;
+  return {
+    realization: realization(),
+    label: settings.custom?.label ?? `${group.conway} (${group.iuc})`,
+    table: settings.custom ? undefined : { group: group.conway, params: { ...settings.params } },
+    base: t.base,
+    paint:
+      m && img
+        ? (ctx) => {
+            ctx.translate(m.x, m.y);
+            ctx.rotate((m.rotationDeg * Math.PI) / 180);
+            ctx.scale(m.scale, m.scale);
+            ctx.drawImage(img, -img.width / 2, -img.height / 2);
+          }
+        : null,
+  };
 }
 
 export function hasMotif(): boolean {
@@ -519,71 +559,3 @@ export function tilingSvg(t: Tiling, view: View, width: number, height: number):
   ].join("\n");
 }
 
-// --- for the orbifold view ------------------------------------------------------------
-
-let canonicalCache: { key: string; domain: OrbifoldDomain | null; lines: GroupLines | null } = { key: "", domain: null, lines: null };
-let copiesCache: { key: string; copies: Isometry[] } = { key: "", copies: [] };
-
-/** One lattice cell of the current tiling, for the 3D view (null without motif). */
-export function patternSource(): PatternSource | null {
-  const t = tiling();
-  const m = settings.motif;
-  const img = motifImage;
-  if (!t || !m || !img) return null;
-  const { t1, t2 } = t.translations;
-  const label = settings.custom?.label ?? `${findGroup(settings.group).conway} (${findGroup(settings.group).iuc})`;
-  const key = JSON.stringify([cache.key, m, img.width, img.height, settings.domainMode]);
-  if (canonicalCache.key !== cache.key) {
-    const ct = buildTiling(realization(), settings.base, "orbifold");
-    const inv = ct?.inventory;
-    canonicalCache = {
-      key: cache.key,
-      domain: ct?.orbifold ?? null,
-      lines: inv ? { mirrors: inv.mirrors, glides: inv.glides, centers: inv.centers, t1, t2, reference: { x: 0, y: 0 } } : null,
-    };
-  }
-  return {
-    key,
-    label,
-    symbol: label.split(" ")[0],
-    t1,
-    t2,
-    orbifold: canonicalCache.domain,
-    lines: canonicalCache.lines,
-    base: t.base,
-    // The group: which one, on which lattice (moving p or the motif does not change it).
-    groupKey: JSON.stringify([settings.group, settings.params, settings.custom?.label ?? null]),
-    copies: () => {
-      // Group elements within a few cells of p – enough to cover any texture region.
-      if (copiesCache.key !== cache.key) {
-        const pad = 3 * (Math.hypot(t1.x, t1.y) + Math.hypot(t2.x, t2.y));
-        const rect = { x0: t.base.x - pad, y0: t.base.y - pad, x1: t.base.x + pad, y1: t.base.y + pad };
-        copiesCache = { key: cache.key, copies: visibleCopies(t, rect, 40000) ?? [] };
-      }
-      return copiesCache.copies;
-    },
-    render(a, b, { origin, marks, strokes }) {
-      const xs = [0, 1].flatMap((u) => [0, 1].map((v) => origin.x + u * a.x + v * b.x));
-      const ys = [0, 1].flatMap((u) => [0, 1].map((v) => origin.y + u * a.y + v * b.y));
-      const pad = Math.hypot(t1.x, t1.y) + Math.hypot(t2.x, t2.y); // the canonical D may reach further than the tiling's
-      const copies = visibleCopies(t, { x0: Math.min(...xs) - pad, y0: Math.min(...ys) - pad, x1: Math.max(...xs) + pad, y1: Math.max(...ys) + pad }, 40000) ?? [];
-      const orbifold = canonicalCache.domain;
-      return renderCell({
-        a,
-        b,
-        origin,
-        ...cellSize(a, b),
-        domain: t.domain,
-        copies,
-        paint: (ctx) => {
-          ctx.translate(m.x, m.y);
-          ctx.rotate((m.rotationDeg * Math.PI) / 180);
-          ctx.scale(m.scale, m.scale);
-          ctx.drawImage(img, -img.width / 2, -img.height / 2);
-        },
-        marks: marks && orbifold ? { domain: orbifold, copies, ...marks } : undefined,
-        strokes: strokes?.length ? { list: strokes, copies } : undefined,
-      });
-    },
-  };
-}

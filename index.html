@@ -8,7 +8,12 @@
   <body>
     <header class="toolbar">
       <div class="segmented mode" id="mode">
-        <button data-mode="analyse" title="Bild laden, Symmetrieelemente einzeichnen, Gruppe prüfen">Analyse</button><button data-mode="orbifold" title="Den Orbifold des Musters in 3D ansehen">Orbifold</button><button data-mode="generate" title="Gruppe wählen, Motiv in den Fundamentalbereich legen, Ebene pflastern">Generierung</button>
+        <button data-mode="analyse" title="Bild laden, Symmetrieelemente einzeichnen, Gruppe prüfen">Analyse</button>
+        <button class="transfer" id="transfer-analyse-orbifold" title="Analyse → Orbifold: Gruppe, p und den ausgeschnittenen Bildinhalt übernehmen">→</button>
+        <button data-mode="orbifold" title="Den Orbifold in 3D ansehen und bemalen">Orbifold</button>
+        <button class="transfer" id="transfer-orbifold-generate" title="Orbifold → Generierung: Gruppe und den (bemalten) Orbifold als Motiv übernehmen">→</button>
+        <button class="transfer" id="transfer-generate-orbifold" title="Generierung → Orbifold: Gruppe, p und das Motiv übernehmen">←</button>
+        <button data-mode="generate" title="Gruppe wählen, Motiv in den Fundamentalbereich legen, Ebene pflastern">Generierung</button>
       </div>
       <div class="toolbar-mode" id="toolbar-analyse">
         <div class="group" id="tools"></div>
@@ -24,14 +29,9 @@
       <div id="stage"><canvas id="canvas"></canvas></div>
       <aside>
         <div id="side-orbifold">
-          <h2>Muster</h2>
-          <div class="segmented" id="orb-source">
-            <button data-source="analyse">aus der Analyse</button><button data-source="generate">aus der Generierung</button>
-          </div>
-          <p id="orb-empty" class="empty">
-            Noch kein Muster mit Gitter: in der Analyse ein Bild laden, Symmetrieelemente einzeichnen und p setzen –
-            oder in der Generierung ein Motiv laden.
-          </p>
+          <h2>Symmetriegruppe</h2>
+          <select id="orb-group" title="Eine Gruppe wählen: ein leerer Orbifold zum Bemalen"></select>
+          <p id="orb-origin" class="info"></p>
           <div id="orb-torus">
             <p id="orb-label" class="orb-label"></p>
             <div class="segmented" id="orb-view">
@@ -156,7 +156,6 @@
             <button data-mode="original">Original</button><button data-mode="reconstruction">Aus D</button><button data-mode="difference">Differenz</button>
           </div>
           <p id="check-info"></p>
-          <button id="to-generate" title="Gruppe, Fundamentalbereich und Bild in den Generierungsmodus übernehmen">In Generierung übernehmen</button>
         </div>
         </div>
       </aside>

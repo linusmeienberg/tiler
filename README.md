@@ -66,13 +66,27 @@ npm run dev       # http://localhost:5173
    - »Aus D« setzt das Bild nur aus dem Inhalt von D zusammen.
    - »Differenz« zeigt, wo das vom Original abweicht.
    - Als Vergleichsmaßstab dient das Bild, gegen sich selbst verschoben.
-8. **In Generierung übernehmen:** Die erkannte Gruppe, p und das Bild wandern in
-   den Generierungsmodus.
+8. **Weitergeben:** Der Pfeil »→« zwischen den Reitern »Analyse« und
+   »Orbifold« übernimmt die erkannte Gruppe, p und den Bildinhalt in den
+   Orbifold-Modus.
 
 ## Orbifold (3D)
 
-Der mittlere Modus zeigt das Muster aus der Analyse oder aus der Generierung in
-3D, mit three.js. Erste Stufe ist der **Torus** ℝ²/Λ: Die Ebene wird aufgefasst,
+Der mittlere Modus zeigt einen Orbifold in 3D, mit three.js.
+
+- **Startzustand:** Eine Gruppe aus dem Dropdown ergibt einen leeren, weißen
+  Orbifold zum Bemalen.
+- **Weitergeben zwischen den Modi:** Die Pfeile zwischen den Reitern
+  übernehmen Gruppe, p und Inhalt:
+
+  | Pfeil | übernimmt |
+  |---|---|
+  | Analyse → Orbifold | den ausgeschnittenen Bildinhalt |
+  | Generierung → Orbifold | das Motiv |
+  | Orbifold → Generierung | den bemalten Orbifold als Motiv |
+
+  Bei jeder Übernahme beginnt die Malerei neu. Beim Weg in die Generierung ist
+  sie ins Motiv eingebrannt. Erste Stufe ist der **Torus** ℝ²/Λ: Die Ebene wird aufgefasst,
 als wären Punkte, die sich um eine Gitterverschiebung unterscheiden, derselbe
 Punkt. Als Textur dient eine Gitterzelle, aufgebaut aus Kopien von D und darum
 nahtlos (`src/cell.ts`, `src/orbifold3d.ts`).

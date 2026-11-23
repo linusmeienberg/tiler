@@ -119,6 +119,10 @@ export function strokeCount(): number {
   return strokes.length;
 }
 
+export function currentStrokes(): Stroke[] {
+  return strokes;
+}
+
 export function undoStroke(): void {
   if (strokes.pop()) strokesVersion++;
 }
