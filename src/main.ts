@@ -84,7 +84,7 @@ let view: View = { scale: 1, ox: 0, oy: 0 };
 const views: Record<Mode, View | null> = { analyse: null, orbifold: null, generate: null };
 /** Orbifold mode: which pattern it shows, and the torus settings. */
 let orbSource: "analyse" | "generate" = "analyse";
-const torus: TorusSettings = { view: "orbifold", swap: false, shift: 0, inflate: 0.35, slide: 0 };
+const torus: TorusSettings = { view: "orbifold", swap: false, shift: 0, inflate: 0.35, slide: 0, marks: true };
 let size = { width: 0, height: 0, dpr: 1 };
 let pointer: Point | null = null; // screen coordinates
 let spaceDown = false;
@@ -497,7 +497,7 @@ function analysisSource(): PatternSource | null {
     t2: c.translations.t2,
     orbifold,
     lines: inv ? { mirrors: inv.mirrors, glides: inv.glides, centers: inv.centers, t1: c.translations.t1, t2: c.translations.t2, reference } : null,
-    render: (av, bv, at) =>
+    render: (av, bv, at, marks, inset) =>
       renderCell({
         a: av,
         b: bv,
@@ -506,6 +506,7 @@ function analysisSource(): PatternSource | null {
         domain: domain.polygon,
         copies: c.elements.map((e) => e.g),
         paint: (ctx) => ctx.drawImage(img, 0, 0),
+        marks: marks && orbifold ? { domain: orbifold, copies: c.elements.map((e) => e.g), inset } : undefined,
       }),
   };
 }
@@ -1204,6 +1205,10 @@ for (const btn of document.querySelectorAll<HTMLButtonElement>("#orb-view button
     requestRender();
   });
 }
+$<HTMLInputElement>("#orb-marks").addEventListener("change", (e) => {
+  torus.marks = (e.target as HTMLInputElement).checked;
+  requestRender();
+});
 $<HTMLInputElement>("#orb-slide").addEventListener("input", (e) => {
   torus.slide = Number((e.target as HTMLInputElement).value);
   requestRender();

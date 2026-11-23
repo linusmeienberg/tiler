@@ -26,7 +26,8 @@ export interface PatternSource {
   orbifold: OrbifoldDomain | null;
   /** Mirrors, glide axes, centers and the reference point – for *x, xx, 22x. */
   lines: GroupLines | null;
-  render(a: Point, b: Point, origin?: Point): HTMLCanvasElement;
+  /** `marks`: draw the orbifold's edge roles, gluing marks and centers into the texture. */
+  render(a: Point, b: Point, origin?: Point, marks?: boolean, inset?: boolean): HTMLCanvasElement;
 }
 
 export interface TorusSettings {
@@ -35,6 +36,7 @@ export interface TorusSettings {
   shift: number; // 0…1: texture shift around the tube
   inflate: number; // 0…1: pillows only
   slide: number; // 0…1: shift along mirrors / glide axes (Möbius band, Klein bottle)
+  marks: boolean; // orbifold marks on the texture, balls at centers, mirror tubes
 }
 
 export type ViewInfo =
@@ -61,7 +63,7 @@ let camera: THREE.PerspectiveCamera;
 let controls: ArcballControls;
 let mesh: THREE.Mesh | null = null;
 let texture: THREE.CanvasTexture | null = null;
-let shown = { key: "", swap: false };
+let shown = { key: "", swap: false, marks: false };
 let body: THREE.Group | null = null;
 let bodyKey = "";
 let bodyTexture: { key: string; texture: THREE.CanvasTexture } | null = null;
@@ -157,9 +159,9 @@ function showTorus(source: PatternSource, settings: TorusSettings): TorusInfo {
   R *= scale;
   r *= scale;
 
-  if (shown.key !== source.key || shown.swap !== settings.swap || !mesh) {
+  if (shown.key !== source.key || shown.swap !== settings.swap || shown.marks !== settings.marks || !mesh) {
     texture?.dispose();
-    texture = new THREE.CanvasTexture(source.render(a, b));
+    texture = new THREE.CanvasTexture(source.render(a, b, undefined, settings.marks));
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
@@ -175,7 +177,7 @@ function showTorus(source: PatternSource, settings: TorusSettings): TorusInfo {
     }
     mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ map: texture, roughness: 0.85, side: THREE.DoubleSide }));
     scene.add(mesh);
-    shown = { key: source.key, swap: settings.swap };
+    shown = { key: source.key, swap: settings.swap, marks: settings.marks };
   }
   mesh.visible = true;
   texture!.offset.set(0, settings.shift);
@@ -199,10 +201,19 @@ function showBody(source: PatternSource, settings: TorusSettings): BodyMesh | nu
       lines: source.lines ?? undefined,
     });
     if (!m) return null;
-    replaceBody(makeBody(m, textureFor(source, m)));
+    replaceBody(makeBody(m, textureFor(source, m, settings.marks)));
     bodyKey = key;
     bodyMesh = m;
   }
+  // Marks toggled: new texture, show or hide balls and mirror tubes.
+  const tex = textureFor(source, bodyMesh!, settings.marks);
+  const surface = body!.children[0] as THREE.Mesh;
+  const mat = surface.material as THREE.MeshStandardMaterial;
+  if (mat.map !== tex) {
+    mat.map = tex;
+    mat.needsUpdate = true;
+  }
+  body!.children.slice(1).forEach((o) => (o.visible = settings.marks));
   // Sliding along mirrors / glide axes only moves the texture (it spans a whole period).
   if (bodyMesh?.shiftable && bodyTexture) bodyTexture.texture.offset.set(settings.slide, 0);
   body!.visible = true;
@@ -210,12 +221,14 @@ function showBody(source: PatternSource, settings: TorusSettings): BodyMesh | nu
 }
 
 /** The texture is the world rectangle `region` around D; reused while only the inflation changes. */
-function textureFor(source: PatternSource, m: BodyMesh): THREE.CanvasTexture {
+function textureFor(source: PatternSource, m: BodyMesh, marks: boolean): THREE.CanvasTexture {
   const r = m.region;
-  const key = JSON.stringify([source.key, r]);
+  const key = JSON.stringify([source.key, r, marks]);
   if (bodyTexture?.key !== key) {
     bodyTexture?.texture.dispose();
-    const t = new THREE.CanvasTexture(source.render(r.a, r.b, r.origin));
+    // Bodies made from D itself have D's edges as their edges: draw the marks just inside.
+    const inset = ["flat", "cylinder", "cone", "pillow"].includes(m.kind);
+    const t = new THREE.CanvasTexture(source.render(r.a, r.b, r.origin, marks, inset));
     t.colorSpace = THREE.SRGBColorSpace;
     if (m.shiftable) t.wrapS = THREE.RepeatWrapping;
     t.anisotropy = renderer!.capabilities.getMaxAnisotropy();

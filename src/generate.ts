@@ -549,11 +549,13 @@ export function patternSource(): PatternSource | null {
     t2,
     orbifold: canonicalCache.domain,
     lines: canonicalCache.lines,
-    render(a, b, at) {
+    render(a, b, at, marks, inset) {
       const origin = at ?? { x: t.base.x - (a.x + b.x) / 2, y: t.base.y - (a.y + b.y) / 2 };
       const xs = [0, 1].flatMap((u) => [0, 1].map((v) => origin.x + u * a.x + v * b.x));
       const ys = [0, 1].flatMap((u) => [0, 1].map((v) => origin.y + u * a.y + v * b.y));
-      const copies = visibleCopies(t, { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) }, 20000) ?? [];
+      const pad = Math.hypot(t1.x, t1.y) + Math.hypot(t2.x, t2.y); // the canonical D may reach further than the tiling's
+      const copies = visibleCopies(t, { x0: Math.min(...xs) - pad, y0: Math.min(...ys) - pad, x1: Math.max(...xs) + pad, y1: Math.max(...ys) + pad }, 40000) ?? [];
+      const orbifold = canonicalCache.domain;
       return renderCell({
         a,
         b,
@@ -567,6 +569,7 @@ export function patternSource(): PatternSource | null {
           ctx.scale(m.scale, m.scale);
           ctx.drawImage(img, -img.width / 2, -img.height / 2);
         },
+        marks: marks && orbifold ? { domain: orbifold, copies, inset } : undefined,
       });
     },
   };

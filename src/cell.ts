@@ -5,6 +5,8 @@
  * domain, so the texture is exactly periodic (seamless when wrapped), even if
  * the photo itself is not.
  */
+import type { OrbifoldDomain } from "./canonical";
+import { drawOrbifold } from "./draw";
 import { apply, type Isometry, type Point } from "./isometry";
 
 export interface CellOptions {
@@ -19,6 +21,8 @@ export interface CellOptions {
   /** Draws the source content (image or motif) in world coordinates. */
   paint: (ctx: CanvasRenderingContext2D) => void;
   background?: string;
+  /** Draw the orbifold marks (edge roles, gluing ticks and arrows, centers) of every copy g(D) over the content. */
+  marks?: { domain: OrbifoldDomain; copies: Isometry[]; inset?: boolean };
 }
 
 export function renderCell(o: CellOptions): HTMLCanvasElement {
@@ -62,6 +66,20 @@ export function renderCell(o: CellOptions): HTMLCanvasElement {
     ctx.clip();
     o.paint(ctx);
     ctx.restore();
+  }
+
+  if (o.marks) {
+    const D = o.marks.domain.polygon;
+    const c = average(D);
+    const r = Math.max(...D.map((v) => dist(v, c)));
+    const toCanvas = (w: Point) => ({ x: m00 * w.x + m01 * w.y + e, y: m10 * w.x + m11 * w.y + f });
+    // Marks sized relative to D (as on screen for a domain of ~160 px across).
+    const perUnit = Math.hypot(m00, m10);
+    const scale = Math.max(0.5, (perUnit * r) / 130);
+    for (const g of o.marks.copies) {
+      if (dist(apply(g, c), cellCenter) > r + cellReach) continue;
+      drawOrbifold(ctx, (w) => toCanvas(apply(g, w)), o.marks.domain, scale, o.marks.inset);
+    }
   }
   return canvas;
 }

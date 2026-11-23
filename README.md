@@ -106,8 +106,13 @@ Bereichs D (`src/bodies.ts`):
   Strecke ihre Länge behält und verklebte Kanten im Raum aufeinanderliegen.
   Einzige Ausnahme sind Kissen und Taschen: Der Regler »Aufblähen« macht sie
   räumlich und dehnt die Textur dabei leicht.
-- **Markierungen:** Kegelspitzen und Spiegelecken erscheinen als Kugeln in der
-  Farbe ihrer Klasse.
+- **Markierungen:** Dieselben Markierungen wie im Muster liegen auch auf
+  Körper und Torus: Spiegelkanten, paarweise markierte Klebekanten mit Pfeil
+  sowie Zentren mit ihrer Zähligkeit, in der Farbe ihrer Klasse. Sie werden für
+  alle Kopien von D in die Textur gezeichnet und passen darum an den Klebestellen
+  zusammen. Bei Körpern aus D selbst sitzen sie knapp innerhalb der Kanten.
+  Kegelspitzen und Spiegelecken erscheinen zusätzlich als Kugeln. Alles lässt
+  sich mit einem Schalter ausblenden.
 - **Nicht-orientierbare Fälle:** \*x, xx und 22x lassen sich im Raum nicht
   unverzerrt bauen, für die Kleinsche Flasche und die Kreuzhaube nicht einmal
   ohne Selbstdurchdringung.

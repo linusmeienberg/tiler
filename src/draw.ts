@@ -338,6 +338,7 @@ export function haloStroke(
   color: string,
   width: number,
   dash: number[] = [],
+  halo = 3,
 ): void {
   ctx.save();
   ctx.setLineDash(dash);
@@ -345,7 +346,7 @@ export function haloStroke(
   ctx.beginPath();
   path();
   ctx.strokeStyle = "rgba(255,255,255,0.85)";
-  ctx.lineWidth = width + 3;
+  ctx.lineWidth = width + halo;
   ctx.stroke();
   ctx.strokeStyle = color;
   ctx.lineWidth = width;
@@ -440,44 +441,72 @@ export const GLUE_COLORS = { rotation: "#111", translation: COLORS.lattice, glid
  * pair) and an arrow showing which way round they are glued; cone points and
  * mirror corners in the color of their class.
  */
-export function drawOrbifold(ctx: CanvasRenderingContext2D, toScreenFn: (w: Point) => Point, d: OrbifoldDomain): void {
-  const pts = d.polygon.map(toScreenFn);
-  const n = pts.length;
+export function drawOrbifold(
+  ctx: CanvasRenderingContext2D,
+  toScreenFn: (w: Point) => Point,
+  d: OrbifoldDomain,
+  /** Size of all marks (1 = screen pixels; larger for textures). */
+  scale = 1,
+  /** Draw everything just inside the polygon (for 3D bodies whose edges are the body's edges). */
+  inset = false,
+): void {
+  const raw = d.polygon.map(toScreenFn);
+  const n = raw.length;
+  const k = scale;
+  const cx = raw.reduce((s, p) => s + p.x, 0) / n;
+  const cy = raw.reduce((s, p) => s + p.y, 0) / n;
+  const pts = raw;
+  const stroke = (path: () => void, color: string, width: number, dash: number[] = []) =>
+    haloStroke(ctx, path, color, width * k, dash.map((x) => x * k), 3 * k);
   d.edges.forEach((e, i) => {
-    const a = pts[i];
-    const b = pts[(i + 1) % n];
+    let a = pts[i];
+    let b = pts[(i + 1) % n];
+    if (inset) {
+      // Move the edge inwards by its half width, so it is fully on the body.
+      const l = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      let nx = -(b.y - a.y) / l;
+      let ny = (b.x - a.x) / l;
+      if (nx * (cx - (a.x + b.x) / 2) + ny * (cy - (a.y + b.y) / 2) < 0) [nx, ny] = [-nx, -ny];
+      const off = (e.kind === "mirror" ? 3.5 : 2.5) * k;
+      a = { x: a.x + nx * off, y: a.y + ny * off };
+      b = { x: b.x + nx * off, y: b.y + ny * off };
+    }
     const segment = () => {
       ctx.moveTo(a.x, a.y);
       ctx.lineTo(b.x, b.y);
     };
     if (e.kind === "mirror") {
-      haloStroke(ctx, segment, COLORS.mirror, 4);
+      stroke(segment, COLORS.mirror, 4);
       return;
     }
     if (e.kind === "open") {
-      haloStroke(ctx, segment, "#dc2626", 2, [4, 4]);
+      stroke(segment, "#dc2626", 2, [4, 4]);
       return;
     }
     const color = GLUE_COLORS[e.via ?? "rotation"];
-    haloStroke(ctx, segment, color, 2, e.via === "glide" ? [7, 4] : []);
+    stroke(segment, color, 2, e.via === "glide" ? [7, 4] : []);
     // Marks at the midpoint: an arrow along the gluing direction, then the ticks.
     const len = Math.hypot(b.x - a.x, b.y - a.y);
-    if (len < 24) return;
+    if (len < 24 * k) return;
     const dir = e.forward ? { x: (b.x - a.x) / len, y: (b.y - a.y) / len } : { x: (a.x - b.x) / len, y: (a.y - b.y) / len };
     const perp = { x: -dir.y, y: dir.x };
-    const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    let m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    if (inset) {
+      // Arrow and ticks fully inside as well.
+      const toC = Math.sign(perp.x * (cx - m.x) + perp.y * (cy - m.y)) || 1;
+      m = { x: m.x + perp.x * toC * 6 * k, y: m.y + perp.y * toC * 6 * k };
+    }
     const ticks = Math.min((e.pair ?? 0) + 1, 4);
-    haloStroke(
-      ctx,
+    stroke(
       () => {
-        const tip = { x: m.x + dir.x * 6, y: m.y + dir.y * 6 };
-        ctx.moveTo(tip.x - dir.x * 7 + perp.x * 6, tip.y - dir.y * 7 + perp.y * 6);
+        const tip = { x: m.x + dir.x * 6 * k, y: m.y + dir.y * 6 * k };
+        ctx.moveTo(tip.x - (dir.x * 7 - perp.x * 6) * k, tip.y - (dir.y * 7 - perp.y * 6) * k);
         ctx.lineTo(tip.x, tip.y);
-        ctx.lineTo(tip.x - dir.x * 7 - perp.x * 6, tip.y - dir.y * 7 - perp.y * 6);
-        for (let k = 0; k < ticks; k++) {
-          const c = { x: m.x - dir.x * (6 + 5 * k), y: m.y - dir.y * (6 + 5 * k) };
-          ctx.moveTo(c.x + perp.x * 6, c.y + perp.y * 6);
-          ctx.lineTo(c.x - perp.x * 6, c.y - perp.y * 6);
+        ctx.lineTo(tip.x - (dir.x * 7 + perp.x * 6) * k, tip.y - (dir.y * 7 + perp.y * 6) * k);
+        for (let t = 0; t < ticks; t++) {
+          const c = { x: m.x - dir.x * (6 + 5 * t) * k, y: m.y - dir.y * (6 + 5 * t) * k };
+          ctx.moveTo(c.x + perp.x * 6 * k, c.y + perp.y * 6 * k);
+          ctx.lineTo(c.x - perp.x * 6 * k, c.y - perp.y * 6 * k);
         }
       },
       color,
@@ -485,15 +514,21 @@ export function drawOrbifold(ctx: CanvasRenderingContext2D, toScreenFn: (w: Poin
     );
   });
   for (const v of d.singular) {
-    const s = toScreenFn(v.point);
+    let s = toScreenFn(v.point);
+    if (inset) {
+      // Into the corner, so that the whole symbol lies on the body.
+      const l = Math.hypot(cx - s.x, cy - s.y) || 1;
+      const t = Math.min(16 * k, 0.4 * l);
+      s = { x: s.x + ((cx - s.x) / l) * t, y: s.y + ((cy - s.y) / l) * t };
+    }
     const color = CLASS_COLORS[v.classIndex % CLASS_COLORS.length];
     ctx.beginPath();
-    ctx.arc(s.x, s.y, 11, 0, 2 * Math.PI);
+    ctx.arc(s.x, s.y, 11 * k, 0, 2 * Math.PI);
     ctx.fillStyle = "white";
     ctx.fill();
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 3 * k;
     ctx.strokeStyle = color;
     ctx.stroke();
-    glyph(ctx, s, v.order as RotationOrder, color, 0.65);
+    glyph(ctx, s, v.order as RotationOrder, color, 0.65 * k);
   }
 }
